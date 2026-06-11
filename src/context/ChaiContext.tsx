@@ -131,7 +131,7 @@ interface ChaiContextType {
   sendCampaign: (id: string) => void;
   
   emails: EmailLog[];
-  sendEmail: (to: string, subject: string, content: string, templateId?: string, attachments?: { filename: string; content: string }[]) => void;
+  sendEmail: (to: string, subject: string, content: string, templateId?: string, file?: File) => void;
   
   leads: Lead[];
   addLead: (lead: Omit<Lead, 'id' | 'createdAt' | 'timeline'>) => void;
@@ -521,7 +521,7 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const sendEmail = async (to: string, subject: string, content: string, templateId?: string, attachments?: { filename: string; content: string }[]) => {
+  const sendEmail = async (to: string, subject: string, content: string, templateId?: string, file?: File) => {
     try {
       let resolvedTemplateId = templateId;
       if (!resolvedTemplateId || resolvedTemplateId === 'none' || resolvedTemplateId === 'discovery' || resolvedTemplateId === 'proposal') {
@@ -545,7 +545,7 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
         variables: { name: "Client", company: "Chaibytes" }
       });
 
-      await api.sendTestEmail(createdCamp.id, to, { name: "Client", company: "Chaibytes" }, attachments);
+      await api.sendTestEmail(createdCamp.id, to, { name: "Client", company: "Chaibytes" }, file);
 
       setCampaigns(prev => [
         {
@@ -566,7 +566,7 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn("Direct dispatch campaign failed, using offline fallback:", e);
       try {
         const activeCampaignId = campaigns.length > 0 ? campaigns[0].id : "00000000-0000-0000-0000-000000000000";
-        await api.sendTestEmail(activeCampaignId, to, { name: "Client", company: "Chaibytes" });
+        await api.sendTestEmail(activeCampaignId, to, { name: "Client", company: "Chaibytes" }, file);
         addToast(`Email sent via backend test fallback!`, 'success');
       } catch (err) {
         console.warn("Offline fallback test email failed:", err);
