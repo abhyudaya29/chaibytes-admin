@@ -20,7 +20,7 @@ export const ComposeEmail: React.FC = () => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState('none');
   const [notification, setNotification] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [attachments, setAttachments] = useState<{ filename: string; content: string }[]>([]);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Set initial "To" address if provided
@@ -34,7 +34,20 @@ export const ComposeEmail: React.FC = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    setSelectedFile(files[0]);
+    
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        const base64Content = result.split(',')[1];
+        setAttachments(prev => [
+          ...prev,
+          { filename: file.name, content: base64Content }
+        ]);
+      };
+      reader.readAsDataURL(file);
+    });
+    
     e.target.value = '';
   };
 
@@ -85,7 +98,7 @@ export const ComposeEmail: React.FC = () => {
       return;
     }
 
-    sendEmail(to, subject, content, selectedTemplate, selectedFile || undefined);
+    sendEmail(to, subject, content, selectedTemplate, attachments);
     
     // Clear and close
     setTo('');
@@ -93,7 +106,7 @@ export const ComposeEmail: React.FC = () => {
     setContent('');
     setComposeInitialTo('');
     setSelectedTemplate('none');
-    setSelectedFile(null);
+    setAttachments([]);
     
     // Temporary notification of success
     addToast(`Email successfully sent to ${to}!`, 'success');
@@ -202,20 +215,22 @@ export const ComposeEmail: React.FC = () => {
                   className="w-full h-44 bg-transparent border-0 outline-none resize-none text-sm text-text-primary font-light placeholder:text-text-secondary/60 focus:ring-0"
                 />
 
-                {/* Selected File Attachment */}
-                {selectedFile && (
+                {/* Selected File Attachments */}
+                {attachments.length > 0 && (
                   <div className="flex flex-wrap gap-2 pt-2 border-t border-border-app/40">
-                    <div className="flex items-center gap-1.5 bg-hover-app border border-border-app px-2.5 py-1 rounded-lg text-[10px] text-text-primary shadow-sm">
-                      <Paperclip className="w-3 h-3 text-text-secondary" />
-                      <span className="truncate max-w-[120px] font-mono">{selectedFile.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedFile(null)}
-                        className="text-text-secondary hover:text-red-500 font-bold ml-1 text-xs"
-                      >
-                        ✕
-                      </button>
-                    </div>
+                    {attachments.map((file, idx) => (
+                      <div key={idx} className="flex items-center gap-1.5 bg-hover-app border border-border-app px-2.5 py-1 rounded-lg text-[10px] text-text-primary shadow-sm">
+                        <Paperclip className="w-3 h-3 text-text-secondary" />
+                        <span className="truncate max-w-[120px] font-mono">{file.filename}</span>
+                        <button
+                          type="button"
+                          onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}
+                          className="text-text-secondary hover:text-red-500 font-bold ml-1 text-xs"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -243,6 +258,7 @@ export const ComposeEmail: React.FC = () => {
                     ref={fileInputRef}
                     onChange={handleFileChange}
                     className="hidden"
+                    multiple
                   />
                 </div>
 

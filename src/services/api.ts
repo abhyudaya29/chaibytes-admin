@@ -217,33 +217,19 @@ export const api = {
     uuid: string,
     email: string,
     variables: Record<string, any> = {},
-    file?: File
+    attachments?: { filename: string; content: string }[]
   ): Promise<{ message: string }> {
-    if (file) {
-      const formData = new FormData();
-      formData.append("email", email);
-      formData.append("variables", JSON.stringify(variables));
-      formData.append("file", file);
-
-      const headers = getHeaders();
-      delete headers["Content-Type"]; // Let browser add multipart/form-data boundary
-
-      const res = await fetch(`${BASE_URL}/campaigns/${uuid}/test`, {
-        method: "POST",
-        headers,
-        body: formData,
-      });
-      if (!res.ok) throw new Error("Failed to send test email");
-      return res.json();
-    } else {
-      const res = await fetch(`${BASE_URL}/campaigns/${uuid}/test`, {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify({ email, variables }),
-      });
-      if (!res.ok) throw new Error("Failed to send test email");
-      return res.json();
+    const payload: Record<string, any> = { email, variables };
+    if (attachments && attachments.length > 0) {
+      payload.attachments = attachments;
     }
+    const res = await fetch(`${BASE_URL}/campaigns/${uuid}/test`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error("Failed to send test email");
+    return res.json();
   },
 
   // Logs
