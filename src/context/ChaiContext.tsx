@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { api } from '../services/api';
+import { api, parseMarkdownToBlocksAndHtml } from '../services/api';
 import type { ApiSubscriber, ApiCampaign, ApiEmailLog, ApiEmailTemplate, ApiBlog } from '../services/api';
 
 // Types
@@ -225,11 +225,15 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addBlog = async (blogData: Omit<Blog, 'id' | 'createdAt' | 'readingTime'>) => {
     try {
+      const richContent = parseMarkdownToBlocksAndHtml(blogData.content);
       const created = await api.createBlog({
         title: blogData.title,
         slug: blogData.slug,
         excerpt: blogData.seoDesc || "Excerpt",
         content: blogData.content,
+        content_html: richContent.content_html,
+        blocks: richContent.blocks,
+        content_images: richContent.content_images,
         cover_image_url: blogData.coverImage || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3",
         tags: blogData.category ? [blogData.category] : ["General"],
         seo_title: blogData.seoTitle,
@@ -286,7 +290,13 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (updates.slug !== undefined) apiPayload.slug = updates.slug;
       if (updates.seoTitle !== undefined) apiPayload.seo_title = updates.seoTitle;
       if (updates.seoDesc !== undefined) apiPayload.seo_description = updates.seoDesc;
-      if (updates.content !== undefined) apiPayload.content = updates.content;
+      if (updates.content !== undefined) {
+        apiPayload.content = updates.content;
+        const richContent = parseMarkdownToBlocksAndHtml(updates.content);
+        apiPayload.content_html = richContent.content_html;
+        apiPayload.blocks = richContent.blocks;
+        apiPayload.content_images = richContent.content_images;
+      }
       if (updates.coverImage !== undefined) apiPayload.cover_image_url = updates.coverImage;
       if (updates.category !== undefined) apiPayload.tags = [updates.category];
 

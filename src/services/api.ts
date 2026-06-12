@@ -6,6 +6,9 @@ export interface ApiBlog {
   slug: string;
   excerpt?: string;
   content: string;
+  content_html?: string;
+  blocks?: any[];
+  content_images?: any[];
   cover_image_url?: string;
   tags?: string[];
   seo_title?: string;
@@ -13,6 +16,144 @@ export interface ApiBlog {
   status: 'draft' | 'published';
   created_at: string;
   updated_at: string;
+}
+
+export function parseMarkdownToBlocksAndHtml(markdown: string) {
+  const lines = markdown.split('\n');
+  const blocks: any[] = [];
+  const contentImages: any[] = [];
+  let htmlResult = '';
+  
+  let currentBlockType: string | null = null;
+  let currentBlockText: string[] = [];
+  let blockCounter = 0;
+  
+  const finishBlock = () => {
+    if (currentBlockText.length === 0) return;
+    const text = currentBlockText.join('\n').trim();
+    if (!text) return;
+    
+    blockCounter++;
+    const id = `block-${Date.now()}-${blockCounter}`;
+    
+    if (currentBlockType === 'paragraph') {
+      blocks.push({
+        id,
+        type: 'paragraph',
+        data: { text }
+      });
+      htmlResult += `<p>${text}</p>`;
+    } else if (currentBlockType === 'heading') {
+      const match = text.match(/^(#{1,6})\s+(.*)$/);
+      const level = match ? match[1].length : 1;
+      const cleanText = match ? match[2] : text;
+      blocks.push({
+        id,
+        type: 'header',
+        data: { text: cleanText, level }
+      });
+      htmlResult += `<h${level}>${cleanText}</h${level}>`;
+    } else if (currentBlockType === 'image') {
+      const match = text.match(/^!\[(.*?)\]\((.*?)(?:\s+"(.*?)"|\s+'(.*?)')?\)$/);
+      if (match) {
+        const alt = match[1] || '';
+        const url = match[2] || '';
+        const caption = match[3] || match[4] || '';
+        
+        blocks.push({
+          id,
+          type: 'image',
+          data: { url, alt, caption }
+        });
+        
+        contentImages.push({
+          url,
+          alt,
+          caption: caption || undefined
+        });
+        
+        htmlResult += `<figure><img src="${url}" alt="${alt}">${caption ? `<figcaption>${caption}</figcaption>` : ''}</figure>`;
+      }
+    } else if (currentBlockType === 'code') {
+      blocks.push({
+        id,
+        type: 'code',
+        data: { text }
+      });
+      htmlResult += `<pre><code>${text}</code></pre>`;
+    } else if (currentBlockType === 'list') {
+      blocks.push({
+        id,
+        type: 'list',
+        data: { style: 'unordered', items: [text] }
+      });
+      htmlResult += `<ul><li>${text}</li></ul>`;
+    } else if (currentBlockType === 'quote') {
+      blocks.push({
+        id,
+        type: 'quote',
+        data: { text }
+      });
+      htmlResult += `<blockquote>${text}</blockquote>`;
+    }
+    
+    currentBlockText = [];
+    currentBlockType = null;
+  };
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    
+    if (trimmed === '') {
+      finishBlock();
+      continue;
+    }
+    
+    if (trimmed.startsWith('#')) {
+      finishBlock();
+      currentBlockType = 'heading';
+      currentBlockText.push(line);
+      finishBlock();
+    } else if (trimmed.startsWith('![') && trimmed.endsWith(')')) {
+      finishBlock();
+      currentBlockType = 'image';
+      currentBlockText.push(trimmed);
+      finishBlock();
+    } else if (trimmed.startsWith('>')) {
+      if (currentBlockType !== 'quote') {
+        finishBlock();
+        currentBlockType = 'quote';
+      }
+      currentBlockText.push(trimmed.replace(/^>\s*/, ''));
+    } else if (trimmed.startsWith('-') || trimmed.startsWith('*') || trimmed.startsWith('+')) {
+      if (currentBlockType !== 'list') {
+        finishBlock();
+        currentBlockType = 'list';
+      }
+      currentBlockText.push(trimmed.replace(/^[-*+]\s*/, ''));
+    } else if (trimmed.startsWith('```')) {
+      if (currentBlockType === 'code') {
+        finishBlock();
+      } else {
+        finishBlock();
+        currentBlockType = 'code';
+      }
+    } else {
+      if (currentBlockType !== 'paragraph' && currentBlockType !== 'code') {
+        finishBlock();
+        currentBlockType = 'paragraph';
+      }
+      currentBlockText.push(line);
+    }
+  }
+  finishBlock();
+  
+  return {
+    content_html: htmlResult,
+    blocks,
+    content_images: contentImages
+  };
 }
 
 const getHeaders = () => {
@@ -250,9 +391,12 @@ export const api = {
     return res.json();
   },
 
-  // Portfolio Blogs
-  async getBlogs(includeDrafts = false): Promise<ApiBlog[]> {
-    const query = includeDrafts ? "?include_drafts=true" : "";
+  async getBlogs(includeDrafts = false, search?: string, tag?: string): Promise<ApiBlog[]> {
+    const params = new URLSearchParams();
+    if (includeDrafts) params.append("include_drafts", "true");
+    if (search) params.append("search", search);
+    if (tag) params.append("tag", tag);
+    const query = params.toString() ? `?${params.toString()}` : "";
     const res = await fetch(`${BASE_URL}/portfolio/blogs${query}`, {
       headers: getHeaders(),
     });
