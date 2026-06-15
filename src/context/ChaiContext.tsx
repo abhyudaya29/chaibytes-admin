@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { api, parseMarkdownToBlocksAndHtml } from '../services/api';
+import { api, parseMarkdownToBlocksAndHtml, normalizeMarkdownForPublicSite } from '../services/api';
 import type { ApiSubscriber, ApiCampaign, ApiEmailLog, ApiEmailTemplate, ApiBlog } from '../services/api';
 
 // Types
@@ -225,12 +225,13 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addBlog = async (blogData: Omit<Blog, 'id' | 'createdAt' | 'readingTime'>) => {
     try {
-      const richContent = parseMarkdownToBlocksAndHtml(blogData.content);
+      const normalizedContent = normalizeMarkdownForPublicSite(blogData.content);
+      const richContent = parseMarkdownToBlocksAndHtml(normalizedContent);
       const created = await api.createBlog({
         title: blogData.title,
         slug: blogData.slug,
         excerpt: blogData.seoDesc || "Excerpt",
-        content: blogData.content,
+        content: normalizedContent,
         content_html: richContent.content_html,
         blocks: richContent.blocks,
         content_images: richContent.content_images,
@@ -282,12 +283,13 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // If this is a local fallback blog (starts with b-), create it on the backend first!
       if (id.startsWith('b-') && existingBlog) {
-        const richContent = parseMarkdownToBlocksAndHtml(existingBlog.content);
+        const normalizedContent = normalizeMarkdownForPublicSite(existingBlog.content);
+        const richContent = parseMarkdownToBlocksAndHtml(normalizedContent);
         const created = await api.createBlog({
           title: existingBlog.title,
           slug: existingBlog.slug,
           excerpt: existingBlog.seoDesc || "Excerpt",
-          content: existingBlog.content,
+          content: normalizedContent,
           content_html: richContent.content_html,
           blocks: richContent.blocks,
           content_images: richContent.content_images,
@@ -316,8 +318,9 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (updates.seoTitle !== undefined) apiPayload.seo_title = updates.seoTitle;
       if (updates.seoDesc !== undefined) apiPayload.seo_description = updates.seoDesc;
       if (updates.content !== undefined) {
-        apiPayload.content = updates.content;
-        const richContent = parseMarkdownToBlocksAndHtml(updates.content);
+        const normalizedContent = normalizeMarkdownForPublicSite(updates.content);
+        apiPayload.content = normalizedContent;
+        const richContent = parseMarkdownToBlocksAndHtml(normalizedContent);
         apiPayload.content_html = richContent.content_html;
         apiPayload.blocks = richContent.blocks;
         apiPayload.content_images = richContent.content_images;

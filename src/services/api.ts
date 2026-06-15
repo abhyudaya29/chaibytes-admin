@@ -156,6 +156,53 @@ export function parseMarkdownToBlocksAndHtml(markdown: string) {
   };
 }
 
+export function normalizeMarkdownForPublicSite(markdown: string): string {
+  const lines = markdown.split('\n');
+  const normalizedLines: string[] = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    
+    if (trimmed === '') {
+      normalizedLines.push('');
+      continue;
+    }
+    
+    if (trimmed.startsWith('#')) {
+      if (normalizedLines.length > 0 && normalizedLines[normalizedLines.length - 1] !== '') {
+        normalizedLines.push('');
+      }
+      normalizedLines.push(trimmed);
+      normalizedLines.push('');
+      continue;
+    }
+    
+    if (trimmed.startsWith('-') || trimmed.startsWith('*') || trimmed.startsWith('+')) {
+      normalizedLines.push(trimmed);
+      continue;
+    }
+    
+    normalizedLines.push(trimmed);
+    if (i < lines.length - 1) {
+      const nextLineTrimmed = lines[i + 1].trim();
+      if (nextLineTrimmed !== '' && !nextLineTrimmed.startsWith('#') && !nextLineTrimmed.startsWith('-') && !nextLineTrimmed.startsWith('*') && !nextLineTrimmed.startsWith('+')) {
+        normalizedLines.push('');
+      }
+    }
+  }
+  
+  const result: string[] = [];
+  for (let i = 0; i < normalizedLines.length; i++) {
+    if (normalizedLines[i] === '' && result[result.length - 1] === '') {
+      continue;
+    }
+    result.push(normalizedLines[i]);
+  }
+  
+  return result.join('\n');
+}
+
 const getHeaders = () => {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",

@@ -196,7 +196,8 @@ export const Blogs: React.FC = () => {
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const selectedText = textarea.value.substring(start, end);
-    const replacement = symbol + (selectedText || placeholder) + (symbol.startsWith('\n') ? '' : symbol);
+    const isWrapper = symbol === '**' || symbol === '*' || symbol === '`';
+    const replacement = symbol + (selectedText || placeholder) + (isWrapper ? symbol : '');
     
     setContent(
       textarea.value.substring(0, start) +
