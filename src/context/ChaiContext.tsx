@@ -277,11 +277,36 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateBlog = async (id: string, updates: Partial<Blog>) => {
     try {
+      let activeId = id;
+      const existingBlog = blogs.find(b => b.id === id);
+      
+      // If this is a local fallback blog (starts with b-), create it on the backend first!
+      if (id.startsWith('b-') && existingBlog) {
+        const richContent = parseMarkdownToBlocksAndHtml(existingBlog.content);
+        const created = await api.createBlog({
+          title: existingBlog.title,
+          slug: existingBlog.slug,
+          excerpt: existingBlog.seoDesc || "Excerpt",
+          content: existingBlog.content,
+          content_html: richContent.content_html,
+          blocks: richContent.blocks,
+          content_images: richContent.content_images,
+          cover_image_url: existingBlog.coverImage || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3",
+          tags: existingBlog.category ? [existingBlog.category] : ["General"],
+          seo_title: existingBlog.seoTitle,
+          seo_description: existingBlog.seoDesc,
+          status: 'draft' // start as draft on backend
+        });
+        activeId = created.id;
+        // Update local state ID immediately so subsequent actions use the correct UUID
+        setBlogs(prev => prev.map(b => b.id === id ? { ...b, id: created.id } : b));
+      }
+
       if (updates.status) {
         if (updates.status === 'published') {
-          await api.publishBlog(id);
+          await api.publishBlog(activeId);
         } else {
-          await api.unpublishBlog(id);
+          await api.unpublishBlog(activeId);
         }
       }
 
@@ -301,13 +326,13 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (updates.category !== undefined) apiPayload.tags = [updates.category];
 
       if (Object.keys(apiPayload).length > 0) {
-        await api.updateBlog(id, apiPayload);
+        await api.updateBlog(activeId, apiPayload);
       }
 
-      setBlogs(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
+      setBlogs(prev => prev.map(b => b.id === id || b.id === activeId ? { ...b, id: activeId, ...updates } : b));
       addToast("Blog updated successfully!", 'success');
     } catch (e) {
-      console.warn("Updating blog offline: using local state fallback");
+      console.warn("Updating blog offline: using local state fallback", e);
       setBlogs(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
       addToast("Blog updated locally (offline fallback)", 'info');
     }

@@ -7,6 +7,136 @@ import {
   CheckCircle
 } from 'lucide-react';
 
+const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
+  if (!content) {
+    return <p className="italic text-text-secondary/60 text-xs">No content written yet. Tap the Write tab to begin...</p>;
+  }
+
+  const lines = content.split('\n');
+  const renderedElements: React.ReactNode[] = [];
+  
+  let currentList: React.ReactNode[] = [];
+  let isInsideList = false;
+  let elementKey = 0;
+
+  const renderTextWithInlineFormatting = (text: string) => {
+    const ctaRegex = /\[[cC][tT][aA]:(.*?)\]\((.*?)\)/g;
+    const isFullLineCta = text.trim().match(/^\[[cC][tT][aA]:(.*?)\]\((.*?)\)$/);
+    if (isFullLineCta) {
+      const btnText = isFullLineCta[1];
+      const btnUrl = isFullLineCta[2];
+      return (
+        <div key={`cta-${elementKey++}`} className="my-5 flex justify-center">
+          <a
+            href={btnUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center px-6 py-2.5 bg-primary-app text-white dark:text-black font-semibold rounded-xl hover:opacity-90 hover:scale-[1.02] active:scale-95 transition-all shadow-md text-xs"
+          >
+            {btnText}
+          </a>
+        </div>
+      );
+    }
+
+    const imageRegex = /!\[(.*?)\]\((.*?)\)/g;
+    const boldRegex = /\*\*(.*?)\*\*/g;
+    const italicRegex = /\*(.*?)\*/g;
+    const codeRegex = /`(.*?)`/g;
+    const linkRegex = /\[(.*?)\]\((.*?)\)/g;
+
+    let html = text
+      .replace(imageRegex, '<figure class="my-4"><img src="$2" alt="$1" class="rounded-xl border border-border-app max-h-96 mx-auto object-contain shadow-md" /><figcaption class="text-center text-[10px] text-text-secondary mt-1.5">$1</figcaption></figure>')
+      .replace(boldRegex, '<strong>$1</strong>')
+      .replace(italicRegex, '<em>$1</em>')
+      .replace(codeRegex, '<code class="bg-hover-app px-1.5 py-0.5 rounded font-mono text-xs text-accent-app font-medium">$1</code>')
+      .replace(ctaRegex, '<a href="$2" target="_blank" class="inline-flex items-center px-3 py-1 bg-primary-app text-white dark:text-black rounded-lg text-[10px] font-semibold hover:opacity-90 shadow-sm mx-1">$1</a>')
+      .replace(linkRegex, (m, t, u) => {
+        if (u.toLowerCase().includes('cta:')) return m;
+        return `<a href="${u}" target="_blank" rel="noopener noreferrer" class="text-primary-app hover:underline font-semibold">${t}</a>`;
+      });
+
+    return <span dangerouslySetInnerHTML={{ __html: html }} />;
+  };
+
+  const flushList = () => {
+    if (isInsideList && currentList.length > 0) {
+      renderedElements.push(
+        <ul key={`ul-${elementKey++}`} className="list-disc pl-5 my-3 space-y-1.5 text-xs font-light leading-relaxed text-text-primary">
+          {currentList}
+        </ul>
+      );
+      currentList = [];
+      isInsideList = false;
+    }
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (trimmed === '') {
+      flushList();
+      continue;
+    }
+
+    if (trimmed.startsWith('#')) {
+      flushList();
+      const match = trimmed.match(/^(#{1,6})\s+(.*)$/);
+      if (match) {
+        const level = match[1].length;
+        const text = match[2];
+        const headingClasses = 
+          level === 1 ? 'text-xl font-bold font-heading mt-6 mb-3 text-text-primary border-b border-border-app/40 pb-1' :
+          level === 2 ? 'text-lg font-bold font-heading mt-5 mb-2.5 text-text-primary' :
+          level === 3 ? 'text-base font-bold font-heading mt-4 mb-2 text-text-primary' :
+          'text-sm font-semibold font-heading mt-3 mb-1 text-text-primary';
+        
+        const Tag = `h${level}` as any;
+        renderedElements.push(
+          <Tag key={`h-${elementKey++}`} className={headingClasses}>
+            {renderTextWithInlineFormatting(text)}
+          </Tag>
+        );
+        continue;
+      }
+    }
+
+    if (trimmed.startsWith('>')) {
+      flushList();
+      const text = trimmed.replace(/^>\s*/, '');
+      renderedElements.push(
+        <blockquote key={`q-${elementKey++}`} className="border-l-4 border-primary-app bg-hover-app/30 px-4 py-2 my-4 rounded-r-lg italic text-text-secondary text-xs">
+          {renderTextWithInlineFormatting(text)}
+        </blockquote>
+      );
+      continue;
+    }
+
+    if (trimmed.startsWith('-') || trimmed.startsWith('*') || trimmed.startsWith('+')) {
+      isInsideList = true;
+      const text = trimmed.replace(/^[-*+]\s*/, '');
+      currentList.push(
+        <li key={`li-${elementKey++}`}>
+          {renderTextWithInlineFormatting(text)}
+        </li>
+      );
+      continue;
+    }
+
+    flushList();
+    renderedElements.push(
+      <p key={`p-${elementKey++}`} className="my-2.5 text-xs font-light leading-relaxed text-text-primary">
+        {renderTextWithInlineFormatting(line)}
+      </p>
+    );
+  }
+
+  flushList();
+
+  return <div className="space-y-1">{renderedElements}</div>;
+};
+
 export const Blogs: React.FC = () => {
   const { blogs, addBlog, updateBlog, deleteBlog, setNewBlogOpen } = useChai();
 
@@ -30,6 +160,15 @@ export const Blogs: React.FC = () => {
   // UI display toggles
   const [editorTab, setEditorTab] = useState<'write' | 'preview'>('write');
   const [isSettingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
+  
+  // Image & CTA Insertion Modals
+  const [isImageModalOpen, setImageModalOpen] = useState(false);
+  const [isCtaModalOpen, setCtaModalOpen] = useState(false);
+  const [imageUrl, setImageUrl] = useState('');
+  const [imageAlt, setImageAlt] = useState('');
+  const [ctaText, setCtaText] = useState('');
+  const [ctaUrl, setCtaUrl] = useState('');
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const categories = ['All', 'Engineering', 'Chai Culture', 'Productivity', 'Design'];
@@ -65,11 +204,49 @@ export const Blogs: React.FC = () => {
       textarea.value.substring(end)
     );
 
-    // Reset cursor focus
+  // Reset cursor focus
     setTimeout(() => {
       textarea.focus();
       textarea.setSelectionRange(start + symbol.length, start + symbol.length + (selectedText || placeholder).length);
     }, 50);
+  };
+
+  const insertImageMarkdown = (url: string, alt: string) => {
+    const textToInsert = `![${alt || 'image'}](${url})`;
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setContent(prev => prev + '\n' + textToInsert + '\n');
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    setContent(
+      textarea.value.substring(0, start) +
+      textToInsert +
+      textarea.value.substring(end)
+    );
+    setImageUrl('');
+    setImageAlt('');
+    setImageModalOpen(false);
+  };
+
+  const insertCtaMarkdown = (text: string, url: string) => {
+    const textToInsert = `\n[cta:${text || 'Click Here'}](${url || 'https://'})\n`;
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setContent(prev => prev + textToInsert);
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    setContent(
+      textarea.value.substring(0, start) +
+      textToInsert +
+      textarea.value.substring(end)
+    );
+    setCtaText('');
+    setCtaUrl('');
+    setCtaModalOpen(false);
   };
 
   // Start creating new blog
@@ -211,14 +388,18 @@ export const Blogs: React.FC = () => {
                 <>
                   {/* Formatting Toolbar */}
                   <div className="flex items-center gap-1 py-1 px-2 border border-border-app/60 rounded-xl bg-hover-app/20 text-text-secondary sticky top-0 z-10 backdrop-blur-md">
-                    <button onClick={() => insertMarkdown('**', 'bold text')} className="p-1.5 rounded hover:bg-hover-app hover:text-text-primary text-xs" title="Bold"><Bold className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => insertMarkdown('*', 'italic text')} className="p-1.5 rounded hover:bg-hover-app hover:text-text-primary text-xs" title="Italic"><Italic className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => insertMarkdown('# ', 'Heading 1')} className="p-1.5 rounded hover:bg-hover-app hover:text-text-primary text-xs" title="Heading"><Heading className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => insertMarkdown('[', '](https://)')} className="p-1.5 rounded hover:bg-hover-app hover:text-text-primary text-xs" title="Link"><Link2 className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => insertMarkdown('`', 'inline code')} className="p-1.5 rounded hover:bg-hover-app hover:text-text-primary text-xs" title="Code"><Code className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => insertMarkdown('\n> ', 'blockquote')} className="p-1.5 rounded hover:bg-hover-app hover:text-text-primary text-xs" title="Quote"><Quote className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => insertMarkdown('\n- ', 'list item')} className="p-1.5 rounded hover:bg-hover-app hover:text-text-primary text-xs" title="List"><List className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => insertMarkdown('![caption](', 'image_url)')} className="p-1.5 rounded hover:bg-hover-app hover:text-text-primary text-xs" title="Image"><ImageIcon className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={() => insertMarkdown('**', 'bold text')} className="p-1.5 rounded hover:bg-hover-app hover:text-text-primary text-xs" title="Bold"><Bold className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={() => insertMarkdown('*', 'italic text')} className="p-1.5 rounded hover:bg-hover-app hover:text-text-primary text-xs" title="Italic"><Italic className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={() => insertMarkdown('# ', 'Heading 1')} className="p-1.5 rounded hover:bg-hover-app hover:text-text-primary text-xs" title="Heading"><Heading className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={() => insertMarkdown('[', '](https://)')} className="p-1.5 rounded hover:bg-hover-app hover:text-text-primary text-xs" title="Link"><Link2 className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={() => insertMarkdown('`', 'inline code')} className="p-1.5 rounded hover:bg-hover-app hover:text-text-primary text-xs" title="Code"><Code className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={() => insertMarkdown('\n> ', 'blockquote')} className="p-1.5 rounded hover:bg-hover-app hover:text-text-primary text-xs" title="Quote"><Quote className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={() => insertMarkdown('\n- ', 'list item')} className="p-1.5 rounded hover:bg-hover-app hover:text-text-primary text-xs" title="List"><List className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={() => setImageModalOpen(true)} className="p-1.5 rounded hover:bg-hover-app hover:text-text-primary text-xs" title="Image"><ImageIcon className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={() => setCtaModalOpen(true)} className="p-1.5 rounded hover:bg-hover-app hover:text-text-primary text-xs flex items-center gap-1 font-bold border border-primary-app/20 px-2 text-primary-app ml-1" title="Add CTA Button">
+                      <PenTool className="w-3 h-3 text-accent-app" />
+                      <span className="text-[10px]">Add CTA</span>
+                    </button>
                   </div>
 
                   {/* Hashnode Title Input */}
@@ -266,12 +447,132 @@ export const Blogs: React.FC = () => {
                   <h1 className="text-3xl font-bold font-heading text-text-primary leading-tight">
                     {title || "Untitled Article"}
                   </h1>
-                  <div className="text-sm font-light text-text-primary leading-relaxed whitespace-pre-wrap border-t border-border-app/40 pt-4">
-                    {content || "*No content written yet. Tap the Write tab to begin...*"}
+                  <div className="border-t border-border-app/40 pt-4">
+                    <MarkdownRenderer content={content} />
                   </div>
                 </div>
               )}
             </div>
+
+            {/* Image Insertion Modal */}
+            {isImageModalOpen && (
+              <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-surface-app border border-border-app rounded-2xl w-full max-w-md p-6 shadow-2xl relative space-y-4">
+                  <div className="flex items-center justify-between border-b border-border-app pb-2">
+                    <h3 className="text-sm font-bold text-text-primary">Insert Image</h3>
+                    <button onClick={() => setImageModalOpen(false)} className="text-text-secondary hover:text-text-primary text-xs">✕</button>
+                  </div>
+                  
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <label className="block font-semibold text-text-secondary mb-1">Image URL</label>
+                      <input
+                        type="text"
+                        placeholder="https://images.unsplash.com/..."
+                        className="w-full bg-hover-app/40 border border-border-app rounded-lg px-2.5 py-2 text-text-primary outline-none focus:border-accent-app"
+                        value={imageUrl}
+                        onChange={e => setImageUrl(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-text-secondary mb-1">Alt Text / Caption</label>
+                      <input
+                        type="text"
+                        placeholder="A descriptive caption"
+                        className="w-full bg-hover-app/40 border border-border-app rounded-lg px-2.5 py-2 text-text-primary outline-none focus:border-accent-app"
+                        value={imageAlt}
+                        onChange={e => setImageAlt(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="relative border border-dashed border-border-app rounded-xl p-4 flex flex-col items-center justify-center bg-hover-app/20 hover:bg-hover-app/40 transition-colors cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const base64Url = event.target?.result as string;
+                            insertImageMarkdown(base64Url, file.name);
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                      <span className="text-[10px] font-semibold text-primary-app">Upload Image from Device</span>
+                      <span className="text-[9px] text-text-secondary mt-1">Converts to inline base64 data</span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-border-app">
+                    <button
+                      onClick={() => setImageModalOpen(false)}
+                      className="px-3.5 py-1.5 border border-border-app text-xs rounded-lg text-text-secondary hover:bg-hover-app"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => insertImageMarkdown(imageUrl, imageAlt)}
+                      className="px-3.5 py-1.5 bg-primary-app text-white dark:text-black text-xs font-bold rounded-lg hover:opacity-90 shadow"
+                    >
+                      Insert Image
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* CTA Insertion Modal */}
+            {isCtaModalOpen && (
+              <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-surface-app border border-border-app rounded-2xl w-full max-w-md p-6 shadow-2xl relative space-y-4">
+                  <div className="flex items-center justify-between border-b border-border-app pb-2">
+                    <h3 className="text-sm font-bold text-text-primary">Insert Call To Action (CTA)</h3>
+                    <button onClick={() => setCtaModalOpen(false)} className="text-text-secondary hover:text-text-primary text-xs">✕</button>
+                  </div>
+                  
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <label className="block font-semibold text-text-secondary mb-1">Button Text</label>
+                      <input
+                        type="text"
+                        placeholder="Get Started / Learn More / Try Demo"
+                        className="w-full bg-hover-app/40 border border-border-app rounded-lg px-2.5 py-2 text-text-primary outline-none focus:border-accent-app"
+                        value={ctaText}
+                        onChange={e => setCtaText(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-text-secondary mb-1">Destination URL</label>
+                      <input
+                        type="text"
+                        placeholder="https://vaidya.chaibytes.in"
+                        className="w-full bg-hover-app/40 border border-border-app rounded-lg px-2.5 py-2 text-text-primary outline-none focus:border-accent-app"
+                        value={ctaUrl}
+                        onChange={e => setCtaUrl(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-border-app">
+                    <button
+                      onClick={() => setCtaModalOpen(false)}
+                      className="px-3.5 py-1.5 border border-border-app text-xs rounded-lg text-text-secondary hover:bg-hover-app"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => insertCtaMarkdown(ctaText, ctaUrl)}
+                      className="px-3.5 py-1.5 bg-primary-app text-white dark:text-black text-xs font-bold rounded-lg hover:opacity-90 shadow"
+                    >
+                      Insert CTA Button
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Slide-out Sidebar Publish Settings Drawer */}
             {isSettingsDrawerOpen && (
