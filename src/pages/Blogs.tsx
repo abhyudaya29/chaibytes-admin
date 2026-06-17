@@ -186,7 +186,7 @@ const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
 };
 
 export const Blogs: React.FC = () => {
-  const { blogs, addBlog, updateBlog, deleteBlog, setNewBlogOpen } = useChai();
+  const { blogs, addBlog, updateBlog, deleteBlog, setNewBlogOpen, authors, addAuthor } = useChai();
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -204,6 +204,8 @@ export const Blogs: React.FC = () => {
   const [slug, setSlug] = useState('');
   const [seoTitle, setSeoTitle] = useState('');
   const [seoDesc, setSeoDesc] = useState('');
+  const [authorName, setAuthorName] = useState('');
+  const [newAuthorInput, setNewAuthorInput] = useState('');
 
   // UI display toggles
   const [editorTab, setEditorTab] = useState<'write' | 'preview'>('write');
@@ -308,6 +310,8 @@ export const Blogs: React.FC = () => {
     setSlug('');
     setSeoTitle('');
     setSeoDesc('');
+    setAuthorName('');
+    setNewAuthorInput('');
     setIsWriting(true);
     setEditorTab('write');
     setSettingsDrawerOpen(false);
@@ -323,6 +327,8 @@ export const Blogs: React.FC = () => {
     setSlug(blog.slug);
     setSeoTitle(blog.seoTitle);
     setSeoDesc(blog.seoDesc);
+    setAuthorName(blog.authorName || '');
+    setNewAuthorInput('');
     setIsWriting(true);
     setEditorTab('write');
     setSettingsDrawerOpen(false);
@@ -343,7 +349,8 @@ export const Blogs: React.FC = () => {
       slug: slug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       seoTitle: seoTitle || `${title} | Chaibytes`,
       seoDesc: seoDesc || content.substring(0, 150) + "...",
-      status: (isDraft ? 'draft' : 'published') as 'draft' | 'published'
+      status: (isDraft ? 'draft' : 'published') as 'draft' | 'published',
+      authorName: authorName || undefined
     };
 
     if (editingBlogId) {
@@ -638,6 +645,49 @@ export const Blogs: React.FC = () => {
 
                 <div className="space-y-4 text-xs">
                   <div>
+                    <label className="block font-semibold text-text-secondary uppercase mb-1">Author</label>
+                    <select
+                      value={authorName}
+                      onChange={e => setAuthorName(e.target.value)}
+                      className="w-full bg-hover-app/40 border border-border-app rounded-lg px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-accent-app cursor-pointer"
+                    >
+                      <option value="" className="bg-surface-app">— Select author —</option>
+                      {authors.map(name => (
+                        <option key={name} value={name} className="bg-surface-app">{name}</option>
+                      ))}
+                    </select>
+                    <div className="flex gap-1.5 mt-2">
+                      <input
+                        type="text"
+                        placeholder="Add new name..."
+                        className="flex-1 bg-hover-app/40 border border-border-app rounded-lg px-2.5 py-1.5 text-text-primary outline-none focus:border-accent-app"
+                        value={newAuthorInput}
+                        onChange={e => setNewAuthorInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && newAuthorInput.trim()) {
+                            addAuthor(newAuthorInput);
+                            setAuthorName(newAuthorInput.trim());
+                            setNewAuthorInput('');
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newAuthorInput.trim()) {
+                            addAuthor(newAuthorInput);
+                            setAuthorName(newAuthorInput.trim());
+                            setNewAuthorInput('');
+                          }
+                        }}
+                        className="px-2.5 py-1.5 bg-primary-app text-white dark:text-black rounded-lg text-xs font-bold hover:opacity-90"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
                     <label className="block font-semibold text-text-secondary uppercase mb-1">Category</label>
                     <select
                       value={category}
@@ -820,6 +870,9 @@ export const Blogs: React.FC = () => {
                       <h3 className="text-sm font-bold font-heading text-text-primary mt-2 group-hover:text-primary-app transition-colors line-clamp-1">
                         {blog.title}
                       </h3>
+                      {blog.authorName && (
+                        <p className="text-[10px] font-mono text-text-secondary/60 mt-0.5">by {blog.authorName}</p>
+                      )}
                       <p className="text-xs font-light text-text-secondary mt-1.5 line-clamp-2 leading-relaxed">
                         {blog.content}
                       </p>

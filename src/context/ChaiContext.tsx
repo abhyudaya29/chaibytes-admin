@@ -15,6 +15,7 @@ export interface Blog {
   category: string;
   readingTime: number;
   createdAt: string;
+  authorName?: string;
 }
 
 export interface Subscriber {
@@ -122,6 +123,10 @@ interface ChaiContextType {
   addBlog: (blog: Omit<Blog, 'id' | 'createdAt' | 'readingTime'>) => void;
   updateBlog: (id: string, updates: Partial<Blog>) => void;
   deleteBlog: (id: string) => void;
+
+  authors: string[];
+  addAuthor: (name: string) => void;
+  removeAuthor: (name: string) => void;
   
   subscribers: Subscriber[];
   addSubscriber: (name: string, email: string, tags: string[]) => void;
@@ -219,6 +224,23 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 1. Blogs - LocalStorage backed
   const [blogs, setBlogs] = useState<Blog[]>(() => getLocalStorageData("chaibytes_blogs", []));
 
+  // Authors list - LocalStorage backed
+  const [authors, setAuthors] = useState<string[]>(() => getLocalStorageData("chaibytes_authors", ["Abhyudaya Dubey"]));
+
+  useEffect(() => {
+    localStorage.setItem("chaibytes_authors", JSON.stringify(authors));
+  }, [authors]);
+
+  const addAuthor = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || authors.includes(trimmed)) return;
+    setAuthors(prev => [...prev, trimmed]);
+  };
+
+  const removeAuthor = (name: string) => {
+    setAuthors(prev => prev.filter(a => a !== name));
+  };
+
   useEffect(() => {
     localStorage.setItem("chaibytes_blogs", JSON.stringify(blogs));
   }, [blogs]);
@@ -239,6 +261,7 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
         tags: blogData.category ? [blogData.category] : ["General"],
         seo_title: blogData.seoTitle,
         seo_description: blogData.seoDesc,
+        author_name: blogData.authorName,
         status: blogData.status
       });
 
@@ -256,7 +279,8 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
         coverImage: created.cover_image_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3",
         category: created.tags && created.tags.length > 0 ? created.tags[0] : "General",
         readingTime,
-        createdAt: created.created_at
+        createdAt: created.created_at,
+        authorName: created.author_name
       };
 
       setBlogs(prev => [newBlogObj, ...prev]);
@@ -270,6 +294,7 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: `b-${Date.now()}`,
         readingTime: time,
         createdAt: new Date().toISOString(),
+        authorName: blogData.authorName,
       };
       setBlogs(prev => [newBlogObj, ...prev]);
       addToast(`Blog "${blogData.title}" saved locally (offline)`, 'info');
@@ -327,6 +352,7 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       if (updates.coverImage !== undefined) apiPayload.cover_image_url = updates.coverImage;
       if (updates.category !== undefined) apiPayload.tags = [updates.category];
+      if (updates.authorName !== undefined) apiPayload.author_name = updates.authorName;
 
       if (Object.keys(apiPayload).length > 0) {
         await api.updateBlog(activeId, apiPayload);
@@ -440,7 +466,8 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
             coverImage: b.cover_image_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3",
             category: b.tags && b.tags.length > 0 ? b.tags[0] : "General",
             readingTime,
-            createdAt: b.created_at
+            createdAt: b.created_at,
+            authorName: b.author_name
           };
         }));
       } catch (e) {
@@ -824,6 +851,9 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
       addBlog,
       updateBlog,
       deleteBlog,
+      authors,
+      addAuthor,
+      removeAuthor,
       subscribers,
       addSubscriber,
       campaigns,
