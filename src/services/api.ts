@@ -13,6 +13,7 @@ export interface ApiBlog {
   tags?: string[];
   seo_title?: string;
   seo_description?: string;
+  author_name?: string;
   status: 'draft' | 'published';
   created_at: string;
   updated_at: string;
