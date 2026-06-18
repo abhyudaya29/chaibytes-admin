@@ -226,6 +226,7 @@ export const Blogs: React.FC = () => {
   // Word count & Reading time
   const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
   const readingTime = Math.max(1, Math.ceil(wordCount / 200));
+  const canSaveArticle = title.trim().length > 0 && content.trim().length > 0;
 
   // Compute slug from title
   const handleTitleChange = (val: string) => {
@@ -336,14 +337,18 @@ export const Blogs: React.FC = () => {
 
   // Submit to Context
   const handleSave = (isDraft: boolean) => {
-    if (!title) {
+    if (!title.trim()) {
       alert("Please specify a title");
+      return;
+    }
+    if (!content.trim()) {
+      alert("Please write some article content before saving");
       return;
     }
 
     const payload = {
-      title,
-      content,
+      title: title.trim(),
+      content: content.trim(),
       category,
       coverImage: coverImage || "https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=800&q=80",
       slug: slug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
@@ -423,13 +428,15 @@ export const Blogs: React.FC = () => {
               </button>
               <button
                 onClick={() => handleSave(true)}
-                className="px-3.5 py-1.5 border border-border-app bg-surface-app text-xs font-semibold text-text-primary rounded-lg hover:bg-hover-app transition-colors shadow-sm"
+                disabled={!canSaveArticle}
+                className="px-3.5 py-1.5 border border-border-app bg-surface-app text-xs font-semibold text-text-primary rounded-lg hover:bg-hover-app transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Save Draft
               </button>
               <button
                 onClick={() => handleSave(false)}
-                className="px-4 py-1.5 bg-primary-app text-white dark:text-black text-xs font-bold rounded-lg hover:opacity-90 shadow transition-all"
+                disabled={!canSaveArticle}
+                className="px-4 py-1.5 bg-primary-app text-white dark:text-black text-xs font-bold rounded-lg hover:opacity-90 shadow transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Publish article
               </button>

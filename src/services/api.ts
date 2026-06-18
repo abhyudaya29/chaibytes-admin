@@ -215,6 +215,18 @@ const getHeaders = () => {
   return headers;
 };
 
+const getApiErrorMessage = async (res: Response, fallback: string) => {
+  try {
+    const payload = await res.json();
+    const detail = payload?.detail ?? payload?.message ?? payload?.error;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) return `${fallback}: ${JSON.stringify(detail)}`;
+  } catch (e) {
+    // Fall back to the response status below when the body is not JSON.
+  }
+  return `${fallback} (${res.status})`;
+};
+
 export interface ApiEmailTemplate {
   id: string; // uuid
   name: string;
@@ -448,7 +460,7 @@ export const api = {
     const res = await fetch(`${BASE_URL}/portfolio/blogs${query}`, {
       headers: getHeaders(),
     });
-    if (!res.ok) throw new Error("Failed to fetch blogs");
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch blogs"));
     return res.json();
   },
 
@@ -458,7 +470,7 @@ export const api = {
       headers: getHeaders(),
       body: JSON.stringify(blog),
     });
-    if (!res.ok) throw new Error("Failed to create blog");
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to create blog"));
     return res.json();
   },
 
@@ -468,7 +480,7 @@ export const api = {
       headers: getHeaders(),
       body: JSON.stringify(blog),
     });
-    if (!res.ok) throw new Error("Failed to update blog");
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to update blog"));
     return res.json();
   },
 
@@ -477,7 +489,7 @@ export const api = {
       method: "POST",
       headers: getHeaders(),
     });
-    if (!res.ok) throw new Error("Failed to publish blog");
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to publish blog"));
     return res.json();
   },
 
@@ -486,7 +498,7 @@ export const api = {
       method: "POST",
       headers: getHeaders(),
     });
-    if (!res.ok) throw new Error("Failed to unpublish blog");
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to unpublish blog"));
     return res.json();
   },
 
@@ -495,7 +507,7 @@ export const api = {
       method: "DELETE",
       headers: getHeaders(),
     });
-    if (!res.ok) throw new Error("Failed to delete blog");
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to delete blog"));
     return res.json();
   },
 };
