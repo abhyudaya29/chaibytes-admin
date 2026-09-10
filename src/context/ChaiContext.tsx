@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { api, parseMarkdownToBlocksAndHtml, normalizeMarkdownForPublicSite } from '../services/api';
+import { api, parseMarkdownToBlocksAndHtml, normalizeMarkdownForPublicSite, ARHASOFT_SITE_KEY } from '../services/api';
 import type { ApiSubscriber, ApiCampaign, ApiEmailLog, ApiEmailTemplate, ApiBlog } from '../services/api';
 
 // Types
 export interface Blog {
   id: string;
+  siteKey: string;
   title: string;
   content: string;
   status: 'draft' | 'published';
@@ -120,7 +121,9 @@ interface ChaiContextType {
   
   // Data
   blogs: Blog[];
-  addBlog: (blog: Omit<Blog, 'id' | 'createdAt' | 'readingTime'>) => void;
+  blogSiteKey: string;
+  setBlogSiteKey: (siteKey: string) => void;
+  addBlog: (blog: Omit<Blog, 'id' | 'createdAt' | 'readingTime' | 'siteKey'>) => void;
   updateBlog: (id: string, updates: Partial<Blog>) => void;
   deleteBlog: (id: string) => void;
 
@@ -223,6 +226,11 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
   // 1. Blogs - LocalStorage backed
   const [blogs, setBlogs] = useState<Blog[]>(() => getLocalStorageData("chaibytes_blogs", []));
+  const [blogSiteKey, setBlogSiteKey] = useState<string>(() => getLocalStorageData("chaibytes_blog_site", ARHASOFT_SITE_KEY));
+
+  useEffect(() => {
+    localStorage.setItem("chaibytes_blog_site", blogSiteKey);
+  }, [blogSiteKey]);
 
   // Authors list - LocalStorage backed
   const [authors, setAuthors] = useState<string[]>(() => getLocalStorageData("chaibytes_authors", ["Abhyudaya Dubey"]));
@@ -245,7 +253,7 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem("chaibytes_blogs", JSON.stringify(blogs));
   }, [blogs]);
 
-  const addBlog = async (blogData: Omit<Blog, 'id' | 'createdAt' | 'readingTime'>) => {
+  const addBlog = async (blogData: Omit<Blog, 'id' | 'createdAt' | 'readingTime' | 'siteKey'>) => {
     try {
       const normalizedContent = normalizeMarkdownForPublicSite(blogData.content);
       const richContent = parseMarkdownToBlocksAndHtml(normalizedContent);
@@ -263,13 +271,14 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
         seo_description: blogData.seoDesc,
         author_name: blogData.authorName,
         status: blogData.status
-      });
+      }, blogSiteKey);
 
       const wordCount = created.content.split(/\s+/).length;
       const readingTime = Math.max(1, Math.ceil(wordCount / 200));
 
       const newBlogObj: Blog = {
         id: created.id,
+        siteKey: blogSiteKey,
         title: created.title,
         content: created.content,
         status: created.status,
@@ -292,6 +301,7 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newBlogObj: Blog = {
         ...blogData,
         id: `b-${Date.now()}`,
+        siteKey: blogSiteKey,
         readingTime: time,
         createdAt: new Date().toISOString(),
         authorName: blogData.authorName,
@@ -323,7 +333,7 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
           seo_title: existingBlog.seoTitle,
           seo_description: existingBlog.seoDesc,
           status: 'draft' // start as draft on backend
-        });
+        }, existingBlog.siteKey || blogSiteKey);
         activeId = created.id;
         // Update local state ID immediately so subsequent actions use the correct UUID
         setBlogs(prev => prev.map(b => b.id === id ? { ...b, id: created.id } : b));
@@ -355,7 +365,7 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (updates.authorName !== undefined) apiPayload.author_name = updates.authorName;
 
       if (Object.keys(apiPayload).length > 0) {
-        await api.updateBlog(activeId, apiPayload);
+        await api.updateBlog(activeId, apiPayload, existingBlog?.siteKey || blogSiteKey);
       }
 
       setBlogs(prev => prev.map(b => b.id === id || b.id === activeId ? { ...b, id: activeId, ...updates } : b));
@@ -451,12 +461,13 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       try {
-        const blogsData = await api.getBlogs(true);
+        const blogsData = await api.getBlogs(true, undefined, undefined, blogSiteKey);
         setBlogs(blogsData.map((b: ApiBlog) => {
           const wordCount = b.content.split(/\s+/).length;
           const readingTime = Math.max(1, Math.ceil(wordCount / 200));
           return {
             id: b.id,
+            siteKey: b.site_key || blogSiteKey,
             title: b.title,
             content: b.content,
             status: b.status,
@@ -476,7 +487,7 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     loadBackendData();
-  }, []);
+  }, [blogSiteKey]);
 
   const addSubscriber = async (name: string, email: string, tags: string[]) => {
     try {
@@ -848,6 +859,8 @@ export const ChaiProvider: React.FC<{ children: React.ReactNode }> = ({ children
       activeNav,
       setActiveNav,
       blogs,
+      blogSiteKey,
+      setBlogSiteKey,
       addBlog,
       updateBlog,
       deleteBlog,

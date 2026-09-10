@@ -1,5 +1,17 @@
 # React + TypeScript + Vite
 
+## Arhasoft blog API
+
+The admin blog editor is scoped to the shared Arhasoft portfolio API with `site_key=arahasoft`.
+Set these variables before building the deployed frontend:
+
+```bash
+export VITE_BASE_URL="https://<flow-nex-api-host>/api"
+export VITE_CHAIBYTES_INTERNAL_API_TOKEN="<internal-api-token>"
+```
+
+The token can also be set at runtime in local storage under `CHAIBYTES_INTERNAL_API_TOKEN`.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

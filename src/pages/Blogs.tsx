@@ -1,10 +1,11 @@
 import React, { useState, useRef } from 'react';
 import type { Blog } from '../context/ChaiContext';
 import { useChai } from '../context/ChaiContext';
+import { ARHASOFT_SITE_KEY, CHAIBYTES_SITE_KEY } from '../services/api';
 import {
   Edit3, Trash2, PenTool, Clock, Plus, ArrowLeft, Search,
   Settings, Bold, Italic, Link2, Code, Quote, List, Heading, Image as ImageIcon,
-  CheckCircle
+  CheckCircle, Globe2
 } from 'lucide-react';
 
 const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
@@ -186,7 +187,7 @@ const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
 };
 
 export const Blogs: React.FC = () => {
-  const { blogs, addBlog, updateBlog, deleteBlog, setNewBlogOpen, authors, addAuthor } = useChai();
+  const { blogs, blogSiteKey, setBlogSiteKey, addBlog, updateBlog, deleteBlog, setNewBlogOpen, authors, addAuthor } = useChai();
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -222,6 +223,10 @@ export const Blogs: React.FC = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const categories = ['All', 'Engineering', 'Chai Culture', 'Productivity', 'Design'];
+  const blogSites = [
+    { key: ARHASOFT_SITE_KEY, name: 'Arhasoft' },
+    { key: CHAIBYTES_SITE_KEY, name: 'Chaibytes' },
+  ];
 
   // Word count & Reading time
   const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
@@ -417,6 +422,17 @@ export const Blogs: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2.5">
+              <div className="hidden sm:flex items-center gap-1.5 rounded-lg border border-primary-app/25 bg-primary-app/10 px-2.5 py-1.5 text-[10px] font-semibold text-primary-app">
+                <Globe2 className="w-3.5 h-3.5" />
+                <select
+                  value={blogSiteKey}
+                  onChange={e => setBlogSiteKey(e.target.value)}
+                  className="bg-transparent outline-none cursor-pointer text-primary-app"
+                  aria-label="Blog publishing site"
+                >
+                  {blogSites.map(site => <option key={site.key} value={site.key}>{site.name}</option>)}
+                </select>
+              </div>
               <button
                 onClick={() => setSettingsDrawerOpen(!isSettingsDrawerOpen)}
                 className={`p-2 rounded-lg border border-border-app hover:bg-hover-app text-text-secondary transition-all ${
@@ -650,6 +666,22 @@ export const Blogs: React.FC = () => {
                   <button onClick={() => setSettingsDrawerOpen(false)} className="text-text-secondary hover:text-text-primary text-xs">✕</button>
                 </div>
 
+                <div className="flex items-center gap-2 rounded-lg border border-primary-app/25 bg-primary-app/10 px-3 py-2 text-xs text-primary-app">
+                  <Globe2 className="w-4 h-4 shrink-0" />
+                  <div>
+                    <label htmlFor="writer-blog-site" className="block font-semibold">Publishing site</label>
+                    <select
+                      id="writer-blog-site"
+                      value={blogSiteKey}
+                      onChange={e => setBlogSiteKey(e.target.value)}
+                      className="mt-0.5 bg-transparent font-semibold outline-none cursor-pointer text-primary-app"
+                    >
+                      {blogSites.map(site => <option key={site.key} value={site.key}>{site.name}</option>)}
+                    </select>
+                    <span className="block text-[10px] opacity-75">Site key: {blogSiteKey}</span>
+                  </div>
+                </div>
+
                 <div className="space-y-4 text-xs">
                   <div>
                     <label className="block font-semibold text-text-secondary uppercase mb-1">Author</label>
@@ -776,13 +808,26 @@ export const Blogs: React.FC = () => {
               <h1 className="text-xl font-bold font-heading text-text-primary">Content Engine</h1>
               <p className="text-xs text-text-secondary">Draft posts and publish technical insights</p>
             </div>
-            <button
-              onClick={handleStartNew}
-              className="flex items-center gap-1.5 bg-primary-app text-white dark:text-black px-4 py-2 rounded-lg text-xs font-bold shadow hover:opacity-90 transition-all"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Create Article</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:flex items-center gap-1.5 rounded-lg border border-primary-app/25 bg-primary-app/10 px-2.5 py-1.5 text-[10px] font-semibold text-primary-app">
+                <Globe2 className="w-3.5 h-3.5" />
+                <select
+                  value={blogSiteKey}
+                  onChange={e => setBlogSiteKey(e.target.value)}
+                  className="bg-transparent outline-none cursor-pointer text-primary-app"
+                  aria-label="Blog publishing site"
+                >
+                  {blogSites.map(site => <option key={site.key} value={site.key}>{site.name}</option>)}
+                </select>
+              </div>
+              <button
+                onClick={handleStartNew}
+                className="flex items-center gap-1.5 bg-primary-app text-white dark:text-black px-4 py-2 rounded-lg text-xs font-bold shadow hover:opacity-90 transition-all"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Create Article</span>
+              </button>
+            </div>
           </div>
 
           {/* Search and Filters */}

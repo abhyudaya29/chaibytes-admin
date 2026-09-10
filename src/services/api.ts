@@ -1,7 +1,10 @@
 const BASE_URL = import.meta.env.VITE_BASE_URL || "http://localhost:8000/api";
+export const ARHASOFT_SITE_KEY = "arahasoft";
+export const CHAIBYTES_SITE_KEY = "chaibytes";
 
 export interface ApiBlog {
   id: string; // uuid
+  site_key?: string;
   title: string;
   slug: string;
   excerpt?: string;
@@ -17,6 +20,17 @@ export interface ApiBlog {
   status: 'draft' | 'published';
   created_at: string;
   updated_at: string;
+  published_at?: string;
+}
+
+interface ApiBlogListResponse {
+  items: ApiBlog[];
+  total: number;
+}
+
+export interface PublishedBlogList {
+  items: ApiBlog[];
+  total: number;
 }
 
 export function parseMarkdownToBlocksAndHtml(markdown: string) {
@@ -209,8 +223,9 @@ const getHeaders = () => {
     "Content-Type": "application/json",
   };
   const token = localStorage.getItem("CHAIBYTES_INTERNAL_API_TOKEN");
-  if (token) {
-    headers["X-Internal-Api-Token"] = token;
+  const configuredToken = token || import.meta.env.VITE_CHAIBYTES_INTERNAL_API_TOKEN;
+  if (configuredToken) {
+    headers["X-Internal-Api-Token"] = configuredToken;
   }
   return headers;
 };
@@ -451,8 +466,9 @@ export const api = {
     return res.json();
   },
 
-  async getBlogs(includeDrafts = false, search?: string, tag?: string): Promise<ApiBlog[]> {
+  async getBlogs(includeDrafts = false, search?: string, tag?: string, siteKey = ARHASOFT_SITE_KEY): Promise<ApiBlog[]> {
     const params = new URLSearchParams();
+    params.append("site_key", siteKey);
     if (includeDrafts) params.append("include_drafts", "true");
     if (search) params.append("search", search);
     if (tag) params.append("tag", tag);
@@ -461,24 +477,47 @@ export const api = {
       headers: getHeaders(),
     });
     if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch blogs"));
+    const payload: ApiBlog[] | ApiBlogListResponse = await res.json();
+    return Array.isArray(payload) ? payload : payload.items;
+  },
+
+  async getPublishedBlogs(limit = 20, offset = 0, siteKey = ARHASOFT_SITE_KEY): Promise<PublishedBlogList> {
+    const params = new URLSearchParams({
+      site_key: siteKey,
+      limit: String(limit),
+      offset: String(offset),
+    });
+    const res = await fetch(`${BASE_URL}/portfolio/blogs?${params.toString()}`, {
+      headers: getHeaders(),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch published blogs"));
     return res.json();
   },
 
-  async createBlog(blog: Omit<ApiBlog, 'id' | 'created_at' | 'updated_at'>): Promise<ApiBlog> {
+  async getPublishedBlog(slug: string, siteKey = ARHASOFT_SITE_KEY): Promise<ApiBlog> {
+    const params = new URLSearchParams({ site_key: siteKey });
+    const res = await fetch(`${BASE_URL}/portfolio/blogs/${encodeURIComponent(slug)}?${params.toString()}`, {
+      headers: getHeaders(),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch blog"));
+    return res.json();
+  },
+
+  async createBlog(blog: Omit<ApiBlog, 'id' | 'created_at' | 'updated_at'>, siteKey = ARHASOFT_SITE_KEY): Promise<ApiBlog> {
     const res = await fetch(`${BASE_URL}/portfolio/blogs`, {
       method: "POST",
       headers: getHeaders(),
-      body: JSON.stringify(blog),
+      body: JSON.stringify({ ...blog, site_key: siteKey }),
     });
     if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to create blog"));
     return res.json();
   },
 
-  async updateBlog(uuid: string, blog: Partial<Omit<ApiBlog, 'id' | 'created_at' | 'updated_at'>>): Promise<ApiBlog> {
+  async updateBlog(uuid: string, blog: Partial<Omit<ApiBlog, 'id' | 'created_at' | 'updated_at'>>, siteKey = ARHASOFT_SITE_KEY): Promise<ApiBlog> {
     const res = await fetch(`${BASE_URL}/portfolio/blogs/${uuid}`, {
       method: "PUT",
       headers: getHeaders(),
-      body: JSON.stringify(blog),
+      body: JSON.stringify({ ...blog, site_key: siteKey }),
     });
     if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to update blog"));
     return res.json();
