@@ -44,18 +44,18 @@ export const CommandPalette: React.FC = () => {
   }, [isCommandPaletteOpen, setCommandPaletteOpen]);
 
   const items = [
-    { id: 'nav-dashboard', label: 'Go to Dashboard', category: 'Navigation', icon: FileText, action: () => setActiveNav('Dashboard') },
-    { id: 'nav-blogs', label: 'Go to Blogs', category: 'Navigation', icon: PenTool, action: () => setActiveNav('Blogs') },
-    { id: 'nav-newsletter', label: 'Go to Newsletter', category: 'Navigation', icon: Mail, action: () => setActiveNav('Subscribers') },
-    { id: 'nav-leads', label: 'Go to Contact Leads', category: 'Navigation', icon: FileText, action: () => setActiveNav('Contact Leads') },
-    { id: 'nav-clients', label: 'Go to Clients CRM', category: 'Navigation', icon: FileText, action: () => setActiveNav('Clients') },
+    { id: 'nav-dashboard', label: 'Go to Overview', category: 'Navigation', icon: FileText, action: () => setActiveNav('Dashboard') },
+    { id: 'nav-blogs', label: 'Go to Content', category: 'Navigation', icon: PenTool, action: () => setActiveNav('Blogs') },
+    { id: 'nav-newsletter', label: 'Go to Subscribers', category: 'Navigation', icon: Mail, action: () => setActiveNav('Subscribers') },
+    { id: 'nav-leads', label: 'Go to Leads', category: 'Navigation', icon: FileText, action: () => setActiveNav('Contact Leads') },
+    { id: 'nav-clients', label: 'Go to Clients', category: 'Navigation', icon: FileText, action: () => setActiveNav('Clients') },
     { id: 'nav-settings', label: 'Go to Settings', category: 'Navigation', icon: Settings, action: () => setActiveNav('Settings') },
-    { id: 'act-new-blog', label: 'Write New Blog Draft', category: 'Actions', icon: PenTool, action: () => setNewBlogOpen(true) },
-    { id: 'act-new-campaign', label: 'Create Newsletter Campaign', category: 'Actions', icon: Mail, action: () => setNewCampaignOpen(true) },
-    { id: 'act-send-email', label: 'Compose Client Email', category: 'Actions', icon: Mail, action: () => setComposeOpen(true) },
+    { id: 'act-new-blog', label: 'Create Content Draft', category: 'Actions', icon: PenTool, action: () => setNewBlogOpen(true) },
+    { id: 'act-new-campaign', label: 'Create Campaign', category: 'Actions', icon: Mail, action: () => setNewCampaignOpen(true) },
+    { id: 'act-send-email', label: 'Send Manual Email', category: 'Actions', icon: Mail, action: () => setComposeOpen(true) },
     {
       id: 'theme-toggle',
-      label: theme === 'dark' ? 'Switch to Morning Chai (Light)' : 'Switch to Midnight Brew (Dark)',
+      label: theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode',
       category: 'System',
       icon: theme === 'dark' ? Sun : Moon,
       action: () => toggleTheme()
@@ -109,7 +109,7 @@ export const CommandPalette: React.FC = () => {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -20 }}
             transition={{ duration: 0.15 }}
-            className="relative w-full max-w-xl mx-4 overflow-hidden border rounded-2xl shadow-2xl bg-surface-app border-border-app z-10"
+            className="relative w-full max-w-xl mx-4 overflow-hidden border rounded-lg shadow-xl bg-surface-app border-border-app z-10"
           >
             {/* Search Input Area */}
             <div className="flex items-center px-4 py-3.5 border-b border-border-app">
@@ -147,7 +147,7 @@ export const CommandPalette: React.FC = () => {
                   return (
                     <div
                       key={item.id}
-                      className={`flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all ${
+                      className={`flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-all ${
                         isSelected
                           ? 'bg-hover-app text-text-primary'
                           : 'text-text-secondary hover:text-text-primary'
@@ -159,7 +159,7 @@ export const CommandPalette: React.FC = () => {
                       onMouseEnter={() => setSelectedIndex(idx)}
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-surface-app shadow-sm border border-border-app/40' : 'bg-transparent'}`}>
+                        <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-surface-app  border border-border-app/40' : 'bg-transparent'}`}>
                           <Icon className={`w-4 h-4 ${isSelected ? 'text-primary-app' : 'text-text-secondary'}`} />
                         </div>
                         <div>
@@ -189,7 +189,7 @@ export const CommandPalette: React.FC = () => {
                 <span>Esc to close</span>
               </div>
               <div className="flex items-center gap-1.5 font-mono">
-                <span className="px-1.5 py-0.5 border border-border-app rounded bg-surface-app shadow-sm">⌘</span>
+                <span className="px-1.5 py-0.5 border border-border-app rounded bg-surface-app ">⌘</span>
                 <span>K</span>
               </div>
             </div>

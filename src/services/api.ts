@@ -230,6 +230,24 @@ const getHeaders = () => {
   return headers;
 };
 
+const getCrmHeaders = () => {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  const token = localStorage.getItem("CHAIBYTES_CRM_ACCESS_TOKEN") || import.meta.env.VITE_CHAIBYTES_CRM_ACCESS_TOKEN;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+};
+
+const getCrmUrl = (path: string) => {
+  const url = new URL(`${BASE_URL}${path}`);
+  const orgToken = localStorage.getItem("CHAIBYTES_CRM_ORG_TOKEN");
+  if (orgToken) url.searchParams.set("org_token", orgToken);
+  return url.toString();
+};
+
 const getApiErrorMessage = async (res: Response, fallback: string) => {
   try {
     const payload = await res.json();
@@ -287,7 +305,517 @@ export interface ApiEmailLog {
   created_at: string;
 }
 
+export type CrmLeadStatus = "new" | "contacted" | "booked" | "closed" | "lost";
+export type CrmEmailStatus = "queued" | "sent" | "delivered" | "opened" | "clicked" | "bounced" | "complained" | "failed";
+
+export interface CrmLead {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  source: string;
+  status: CrmLeadStatus;
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface CrmEmailConfig {
+  id?: string;
+  provider: "resend";
+  api_key?: string;
+  from_email: string;
+  from_name: string;
+  reply_to?: string;
+  sending_domain?: string;
+  status: "active" | "inactive";
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CrmEmailTemplate {
+  id: string;
+  name: string;
+  resend_template_id: string;
+  template_type: string;
+  variable_mappings?: Record<string, string>;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CrmEmailAutomation {
+  id: string;
+  name: string;
+  trigger: "new_lead" | string;
+  template_id: string;
+  delay_minutes: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CrmEmailMessage {
+  id: string;
+  lead_id?: string;
+  template_id?: string;
+  automation_id?: string;
+  provider_message_id?: string;
+  to_email?: string;
+  recipient_email?: string;
+  recipient?: string;
+  subject?: string;
+  template_name?: string;
+  template_type?: string;
+  status: CrmEmailStatus;
+  created_at: string;
+  sent_at?: string;
+  delivered_at?: string;
+  opened_at?: string;
+  clicked_at?: string;
+  bounced_at?: string;
+  complained_at?: string;
+  error_message?: string;
+  failed_reason?: string;
+}
+
+export interface ResendIntegration {
+  configured: boolean;
+  provider?: "resend";
+  status?: "connected" | "not_connected" | "expired" | "error" | string;
+  masked_key?: string;
+  from_email?: string;
+  from_name?: string;
+  reply_to?: string;
+  sending_domain?: string;
+  last_verified_at?: string;
+  updated_at?: string;
+}
+
+export interface ConnectResendPayload {
+  api_key: string;
+  from_email: string;
+  from_name: string;
+  reply_to?: string;
+  sending_domain?: string;
+}
+
+export interface SyncedEmailTemplate {
+  id: string;
+  name: string;
+  provider_template_id?: string;
+  resend_template_id?: string;
+  template_type?: string;
+  status?: "published" | "draft" | "unavailable" | string;
+  variables?: string[];
+  required_variables?: string[];
+  variable_mappings?: Record<string, string>;
+  mappings?: TemplateVariableMapping[];
+  mapping_complete?: boolean;
+  last_synced_at?: string;
+  updated_at?: string;
+}
+
+export interface TemplateVariableMapping {
+  variable_name: string;
+  source_type: "lead" | "organization" | "user" | "booking" | "static";
+  source_field: string;
+  static_value?: string;
+}
+
+export interface EmailActivityMessage extends CrmEmailMessage {
+  recipient_email?: string;
+  recipient?: string;
+  template?: string;
+  template_label?: string;
+  related_lead_name?: string;
+  lead_name?: string;
+  last_event_at?: string;
+  last_event?: string;
+}
+
+export interface CrmListResponse<T> {
+  items: T[];
+  total?: number;
+}
+
+export interface CrmSignupPayload {
+  full_name: string;
+  phone_number: string;
+  email: string;
+  password: string;
+  domain: string;
+  organization_type: string;
+}
+
+export interface CrmAuthResponse {
+  access_token?: string;
+  token?: string;
+  org_token?: string;
+  org_id?: string;
+  org_identifier?: string;
+  organization?: {
+    id?: string;
+    org_id?: string;
+    org_token?: string;
+    slug?: string;
+    org_identifier?: string;
+    [key: string]: any;
+  };
+  [key: string]: any;
+}
+
+const normalizeList = <T,>(payload: T[] | CrmListResponse<T>): T[] => {
+  return Array.isArray(payload) ? payload : payload.items;
+};
+
 export const api = {
+  crmTokenStorageKey: "CHAIBYTES_CRM_ACCESS_TOKEN",
+  crmOrgTokenStorageKey: "CHAIBYTES_CRM_ORG_TOKEN",
+  crmOrgIdentifierStorageKey: "CHAIBYTES_CRM_ORG_IDENTIFIER",
+  crmOrgDataStorageKey: "CHAIBYTES_CRM_ORG_DATA",
+
+  setCrmAccessToken(token: string) {
+    localStorage.setItem("CHAIBYTES_CRM_ACCESS_TOKEN", token.trim());
+  },
+
+  getCrmAccessToken() {
+    return localStorage.getItem("CHAIBYTES_CRM_ACCESS_TOKEN") || "";
+  },
+
+  setCrmOrgData(payload: CrmAuthResponse) {
+    const orgToken = payload.org_token || payload.organization?.org_token;
+    if (orgToken) {
+      localStorage.setItem("CHAIBYTES_CRM_ORG_TOKEN", orgToken);
+    }
+    const orgIdentifier = payload.org_identifier || payload.org_id || payload.organization?.org_identifier || payload.organization?.org_id || payload.organization?.id || payload.organization?.slug;
+    if (orgIdentifier) {
+      localStorage.setItem("CHAIBYTES_CRM_ORG_IDENTIFIER", orgIdentifier);
+    }
+    localStorage.setItem("CHAIBYTES_CRM_ORG_DATA", JSON.stringify({
+      ...payload.organization,
+      org_token: orgToken || "",
+      org_identifier: orgIdentifier || "",
+    }));
+  },
+
+  getCrmOrgToken() {
+    return localStorage.getItem("CHAIBYTES_CRM_ORG_TOKEN") || "";
+  },
+
+  getCrmOrgIdentifier() {
+    return localStorage.getItem("CHAIBYTES_CRM_ORG_IDENTIFIER") || "";
+  },
+
+  getCrmOrgData() {
+    try {
+      return JSON.parse(localStorage.getItem("CHAIBYTES_CRM_ORG_DATA") || "{}") as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  },
+
+  clearCrmAuth() {
+    localStorage.removeItem("CHAIBYTES_CRM_ACCESS_TOKEN");
+    localStorage.removeItem("CHAIBYTES_CRM_ORG_TOKEN");
+    localStorage.removeItem("CHAIBYTES_CRM_ORG_IDENTIFIER");
+    localStorage.removeItem("CHAIBYTES_CRM_ORG_DATA");
+  },
+
+  async registerCrm(payload: CrmSignupPayload): Promise<CrmAuthResponse> {
+    const res = await fetch(`${BASE_URL}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to create account"));
+    const data: CrmAuthResponse = await res.json();
+    const token = data.access_token || data.token;
+    if (token) this.setCrmAccessToken(token);
+    this.setCrmOrgData(data);
+    return data;
+  },
+
+  async loginCrm(email: string, password: string): Promise<CrmAuthResponse> {
+    const res = await fetch(`${BASE_URL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to login"));
+    const payload: CrmAuthResponse = await res.json();
+    const token = payload.access_token || payload.token;
+    if (token) this.setCrmAccessToken(token);
+    this.setCrmOrgData(payload);
+    return payload;
+  },
+
+  async createCrmLead(lead: Omit<CrmLead, "id" | "created_at" | "updated_at">): Promise<CrmLead> {
+    const res = await fetch(getCrmUrl("/crm/leads"), {
+      method: "POST",
+      headers: getCrmHeaders(),
+      body: JSON.stringify(lead),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to create lead"));
+    return res.json();
+  },
+
+  async createPublicCrmLead(orgIdentifier: string, lead: Pick<CrmLead, "name" | "email" | "phone" | "source" | "notes">): Promise<CrmLead> {
+    const res = await fetch(`${BASE_URL}/crm/public/${encodeURIComponent(orgIdentifier)}/leads`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(lead),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to submit public lead"));
+    return res.json();
+  },
+
+  async getCrmLeads(filters: { search?: string; status?: string; source?: string; limit?: number; offset?: number } = {}): Promise<CrmLead[]> {
+    const params = new URLSearchParams();
+    if (filters.search) params.set("search", filters.search);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.source) params.set("source", filters.source);
+    if (filters.limit) params.set("limit", String(filters.limit));
+    if (filters.offset !== undefined) params.set("offset", String(filters.offset));
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const res = await fetch(getCrmUrl(`/crm/leads${query}`), { headers: getCrmHeaders() });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch leads"));
+    return normalizeList(await res.json());
+  },
+
+  async getCrmLead(id: string): Promise<CrmLead> {
+    const res = await fetch(getCrmUrl(`/crm/leads/${encodeURIComponent(id)}`), { headers: getCrmHeaders() });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch lead"));
+    return res.json();
+  },
+
+  async updateCrmLead(id: string, updates: Partial<Pick<CrmLead, "status" | "notes" | "name" | "email" | "phone" | "source">>): Promise<CrmLead> {
+    const res = await fetch(getCrmUrl(`/crm/leads/${encodeURIComponent(id)}`), {
+      method: "PUT",
+      headers: getCrmHeaders(),
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to update lead"));
+    return res.json();
+  },
+
+  async triggerCrmLeadAutomations(id: string, trigger = "new_lead"): Promise<{ message: string }> {
+    const res = await fetch(getCrmUrl(`/crm/leads/${encodeURIComponent(id)}/trigger-automations?trigger=${encodeURIComponent(trigger)}`), {
+      method: "POST",
+      headers: getCrmHeaders(),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to trigger automations"));
+    return res.json();
+  },
+
+  async sendCrmLeadEmail(id: string, payload: { template_id: string; variables?: Record<string, any> }): Promise<CrmEmailMessage> {
+    const res = await fetch(getCrmUrl(`/crm/leads/${encodeURIComponent(id)}/send-email`), {
+      method: "POST",
+      headers: getCrmHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to send lead email"));
+    return res.json();
+  },
+
+  async getCrmEmailConfig(): Promise<CrmEmailConfig | null> {
+    const res = await fetch(getCrmUrl("/crm/email-config"), { headers: getCrmHeaders() });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch email config"));
+    return res.json();
+  },
+
+  async saveCrmEmailConfig(config: CrmEmailConfig): Promise<CrmEmailConfig> {
+    const res = await fetch(getCrmUrl("/crm/email-config"), {
+      method: "POST",
+      headers: getCrmHeaders(),
+      body: JSON.stringify(config),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to save email config"));
+    return res.json();
+  },
+
+  async patchCrmEmailConfig(config: Partial<CrmEmailConfig>): Promise<CrmEmailConfig> {
+    const res = await fetch(getCrmUrl("/crm/email-config"), {
+      method: "PATCH",
+      headers: getCrmHeaders(),
+      body: JSON.stringify(config),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to update email config"));
+    return res.json();
+  },
+
+  async getCrmTemplates(includeInactive = false): Promise<CrmEmailTemplate[]> {
+    const query = includeInactive ? "?include_inactive=true" : "?include_inactive=false";
+    const res = await fetch(getCrmUrl(`/crm/email-templates${query}`), { headers: getCrmHeaders() });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch CRM templates"));
+    return normalizeList(await res.json());
+  },
+
+  async createCrmTemplate(template: Omit<CrmEmailTemplate, "id" | "created_at" | "updated_at">): Promise<CrmEmailTemplate> {
+    const res = await fetch(getCrmUrl("/crm/email-templates"), {
+      method: "POST",
+      headers: getCrmHeaders(),
+      body: JSON.stringify(template),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to create CRM template"));
+    return res.json();
+  },
+
+  async updateCrmTemplate(id: string, template: Partial<Omit<CrmEmailTemplate, "id" | "created_at" | "updated_at">>): Promise<CrmEmailTemplate> {
+    const res = await fetch(getCrmUrl(`/crm/email-templates/${encodeURIComponent(id)}`), {
+      method: "PUT",
+      headers: getCrmHeaders(),
+      body: JSON.stringify(template),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to update CRM template"));
+    return res.json();
+  },
+
+  async getCrmAutomations(): Promise<CrmEmailAutomation[]> {
+    const res = await fetch(getCrmUrl("/crm/email-automations"), { headers: getCrmHeaders() });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch automations"));
+    return normalizeList(await res.json());
+  },
+
+  async createCrmAutomation(automation: Omit<CrmEmailAutomation, "id" | "created_at" | "updated_at">): Promise<CrmEmailAutomation> {
+    const res = await fetch(getCrmUrl("/crm/email-automations"), {
+      method: "POST",
+      headers: getCrmHeaders(),
+      body: JSON.stringify(automation),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to create automation"));
+    return res.json();
+  },
+
+  async updateCrmAutomation(id: string, automation: Partial<Omit<CrmEmailAutomation, "id" | "created_at" | "updated_at">>): Promise<CrmEmailAutomation> {
+    const res = await fetch(getCrmUrl(`/crm/email-automations/${encodeURIComponent(id)}`), {
+      method: "PUT",
+      headers: getCrmHeaders(),
+      body: JSON.stringify(automation),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to update automation"));
+    return res.json();
+  },
+
+  async getCrmEmailMessages(filters: { lead_id?: string; status?: string; limit?: number; offset?: number } = {}): Promise<CrmEmailMessage[]> {
+    const params = new URLSearchParams();
+    if (filters.lead_id) params.set("lead_id", filters.lead_id);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.limit) params.set("limit", String(filters.limit));
+    if (filters.offset) params.set("offset", String(filters.offset));
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const res = await fetch(getCrmUrl(`/crm/email-messages${query}`), { headers: getCrmHeaders() });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch CRM email messages"));
+    return normalizeList(await res.json());
+  },
+
+  async getResendIntegration(): Promise<ResendIntegration> {
+    const res = await fetch(getCrmUrl("/email/integrations/resend"), { headers: getCrmHeaders() });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch Resend integration"));
+    return res.json();
+  },
+
+  async connectResend(payload: ConnectResendPayload): Promise<ResendIntegration> {
+    const res = await fetch(getCrmUrl("/email/integrations/resend/connect"), {
+      method: "POST",
+      headers: getCrmHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to connect Resend"));
+    return res.json();
+  },
+
+  async testResendConnection(): Promise<{ message?: string; status?: string }> {
+    const res = await fetch(getCrmUrl("/email/integrations/resend/test"), {
+      method: "POST",
+      headers: getCrmHeaders(),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Test email failed"));
+    return res.json();
+  },
+
+  async disconnectResend(): Promise<{ message?: string }> {
+    const res = await fetch(getCrmUrl("/email/integrations/resend"), {
+      method: "DELETE",
+      headers: getCrmHeaders(),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to disconnect Resend"));
+    return res.json();
+  },
+
+  async syncEmailTemplates(): Promise<{ synced?: number; count?: number; templates?: SyncedEmailTemplate[]; message?: string }> {
+    const res = await fetch(getCrmUrl("/email/templates/sync"), {
+      method: "POST",
+      headers: getCrmHeaders(),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Unable to sync templates. Try again."));
+    return res.json();
+  },
+
+  async getEmailTemplates(): Promise<SyncedEmailTemplate[]> {
+    const res = await fetch(getCrmUrl("/email/templates"), { headers: getCrmHeaders() });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch email templates"));
+    return normalizeList(await res.json());
+  },
+
+  async getEmailTemplate(id: string): Promise<SyncedEmailTemplate> {
+    const res = await fetch(getCrmUrl(`/email/templates/${encodeURIComponent(id)}`), { headers: getCrmHeaders() });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Template no longer exists in Resend."));
+    return res.json();
+  },
+
+  async updateEmailTemplatePurpose(id: string, templateType: string): Promise<SyncedEmailTemplate> {
+    const res = await fetch(getCrmUrl(`/email/templates/${encodeURIComponent(id)}/purpose`), {
+      method: "PATCH",
+      headers: getCrmHeaders(),
+      body: JSON.stringify({ template_type: templateType }),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to update template purpose"));
+    return res.json();
+  },
+
+  async updateEmailTemplateMappings(id: string, mappings: TemplateVariableMapping[]): Promise<SyncedEmailTemplate> {
+    const res = await fetch(getCrmUrl(`/email/templates/${encodeURIComponent(id)}/mappings`), {
+      method: "PUT",
+      headers: getCrmHeaders(),
+      body: JSON.stringify({ mappings }),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to save variable mappings"));
+    return res.json();
+  },
+
+  async sendEmailTemplateTest(id: string, recipient: string, variables: Record<string, any> = {}): Promise<{ message?: string }> {
+    const res = await fetch(getCrmUrl(`/email/templates/${encodeURIComponent(id)}/test`), {
+      method: "POST",
+      headers: getCrmHeaders(),
+      body: JSON.stringify({ recipient, email: recipient, variables }),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Test email failed."));
+    return res.json();
+  },
+
+  async getEmailActivity(filters: { status?: string; template_id?: string; search?: string; date_from?: string; date_to?: string; limit?: number; offset?: number } = {}): Promise<EmailActivityMessage[]> {
+    const params = new URLSearchParams();
+    if (filters.status) params.set("status", filters.status);
+    if (filters.template_id) params.set("template_id", filters.template_id);
+    if (filters.search) params.set("search", filters.search);
+    if (filters.date_from) params.set("date_from", filters.date_from);
+    if (filters.date_to) params.set("date_to", filters.date_to);
+    if (filters.limit) params.set("limit", String(filters.limit));
+    if (filters.offset) params.set("offset", String(filters.offset));
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const res = await fetch(getCrmUrl(`/email/messages${query}`), { headers: getCrmHeaders() });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch email activity"));
+    return normalizeList(await res.json());
+  },
+
+  async getEmailActivityMessage(id: string): Promise<EmailActivityMessage> {
+    const res = await fetch(getCrmUrl(`/email/messages/${encodeURIComponent(id)}`), { headers: getCrmHeaders() });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch email details"));
+    return res.json();
+  },
+
   // Email Templates
   async getTemplates(includeInactive = false): Promise<ApiEmailTemplate[]> {
     const query = includeInactive ? "?include_inactive=true" : "";
