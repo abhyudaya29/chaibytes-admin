@@ -39,6 +39,7 @@ function App() {
     if (path === '/clients') return <Clients />;
     if (path === '/assets') return <Media />;
     if (path === '/settings') return <Settings />;
+    if (path === '/settings/google') return <Integrations />;
     if (path === '/email') return <EmailOverview />;
     if (path === '/email/templates') return <EmailTemplates />;
     if (path.startsWith('/email/templates/')) {

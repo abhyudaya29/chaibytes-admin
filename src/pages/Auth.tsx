@@ -85,7 +85,6 @@ const getPasswordStrength = (
   if (/[^A-Za-z0-9]/.test(password)) score += 1;
 
   const labels = ["Too short", "Weak", "Fair", "Good", "Strong"];
-
   return {
     label: labels[score],
     score,
@@ -130,7 +129,7 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
 
   const [login, setLogin] = React.useState<LoginFormState>({
     email: "",
-    password: "",
+    password: "", 
   });
 
   const isSignup = mode === "signup";

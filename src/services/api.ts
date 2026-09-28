@@ -320,6 +320,50 @@ export interface CrmLead {
   updated_at?: string;
 }
 
+export interface GoogleCalendarStatus {
+  connected: boolean;
+  google_email?: string;
+  calendar_id?: string;
+  connected_at?: string;
+}
+
+export interface GoogleCalendarBooking {
+  id: string;
+  organization_id: number;
+  lead_id: string;
+  google_event_id: string;
+  google_calendar_id: string;
+  meet_url: string;
+  calendar_html_link: string | null;
+  start_time: string;
+  end_time: string;
+  timezone: string;
+}
+
+export interface GoogleUpcomingMeeting {
+  event_id: string;
+  title: string;
+  start: string;
+  end: string;
+  meet_url?: string | null;
+  html_link?: string | null;
+  attendees: unknown[];
+}
+
+export interface GoogleUpcomingMeetingsResponse {
+  calendar_id: string;
+  days: number;
+  meetings: GoogleUpcomingMeeting[];
+}
+
+export interface CreateGoogleCalendarBookingPayload {
+  start_time: string;
+  end_time: string;
+  timezone: string;
+  title?: string;
+  description?: string;
+}
+
 export interface CrmEmailConfig {
   id?: string;
   provider: "resend";
@@ -596,6 +640,58 @@ export const api = {
       body: JSON.stringify(updates),
     });
     if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to update lead"));
+    return res.json();
+  },
+
+  async getGoogleCalendarStatus(): Promise<GoogleCalendarStatus> {
+    const res = await fetch(getCrmUrl("/google/status"), { headers: getCrmHeaders() });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch Google Calendar status"));
+    return res.json();
+  },
+
+  async getGoogleCalendarAuthorizationUrl(): Promise<string> {
+    const res = await fetch(getCrmUrl("/google/connect"), { headers: getCrmHeaders() });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to start Google connection"));
+    const payload = await res.json() as { authorization_url?: string };
+    if (!payload.authorization_url) throw new Error("Google did not return an authorization URL");
+    return payload.authorization_url;
+  },
+
+  async disconnectGoogleCalendar(): Promise<void> {
+    const res = await fetch(getCrmUrl("/google"), {
+      method: "DELETE",
+      headers: getCrmHeaders(),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to disconnect Google Calendar"));
+  },
+
+  async getGoogleUpcomingMeetings(filters: { days?: number; limit?: number } = {}): Promise<GoogleUpcomingMeetingsResponse> {
+    const params = new URLSearchParams();
+    params.set("days", String(filters.days ?? 7));
+    params.set("limit", String(filters.limit ?? 50));
+    const res = await fetch(getCrmUrl(`/google/upcoming?${params.toString()}`), {
+      headers: getCrmHeaders(),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch upcoming Google meetings"));
+    return res.json();
+  },
+
+  async getCrmLeadBooking(id: string): Promise<GoogleCalendarBooking | null> {
+    const res = await fetch(getCrmUrl(`/crm/leads/${encodeURIComponent(id)}/booking`), {
+      headers: getCrmHeaders(),
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch lead booking"));
+    return res.json();
+  },
+
+  async bookCrmLead(id: string, payload: CreateGoogleCalendarBookingPayload): Promise<GoogleCalendarBooking> {
+    const res = await fetch(getCrmUrl(`/crm/leads/${encodeURIComponent(id)}/book`), {
+      method: "POST",
+      headers: getCrmHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to book lead"));
     return res.json();
   },
 
