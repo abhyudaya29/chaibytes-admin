@@ -15,6 +15,7 @@ import {
   RefreshCcw,
   Search,
   Send,
+  Trash2,
   UserPlus,
   X,
 } from 'lucide-react';
@@ -61,6 +62,17 @@ const focusRing =
 
 const controlCls =
   'w-full rounded-lg border border-border-app bg-surface-app px-3 py-2.5 text-sm text-text-primary shadow-sm outline-none transition placeholder:text-text-secondary/60 focus:border-primary-app focus:ring-2 focus:ring-primary-app/20';
+
+const getBrowserTimezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+
+const toLocalIsoWithOffset = (value: Date) => {
+  const pad = (input: number) => String(input).padStart(2, '0');
+  const offset = -value.getTimezoneOffset();
+  const sign = offset >= 0 ? '+' : '-';
+  const absOffset = Math.abs(offset);
+
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}${sign}${pad(Math.floor(absOffset / 60))}:${pad(absOffset % 60)}`;
+};
 
 export const Leads: React.FC = () => {
   const { addToast } = useChai();
@@ -275,11 +287,17 @@ export const Leads: React.FC = () => {
     }
   };
 
-  const openSchedule = (lead: CrmLead) => {
+  const openSchedule = (lead: CrmLead, existingBooking?: GoogleCalendarBooking | null) => {
     setSelectedLead(lead);
-    const start = new Date(Date.now() + 60 * 60 * 1000);
-    start.setMinutes(0, 0, 0);
-    const end = new Date(start.getTime() + 30 * 60 * 1000);
+    const activeBooking =
+      existingBooking !== undefined
+        ? existingBooking
+        : selectedLead?.id === lead.id
+          ? booking
+          : null;
+    const start = activeBooking ? new Date(activeBooking.start_time) : new Date(Date.now() + 60 * 60 * 1000);
+    if (!activeBooking) start.setMinutes(0, 0, 0);
+    const end = activeBooking ? new Date(activeBooking.end_time) : new Date(start.getTime() + 30 * 60 * 1000);
     const formatDate = (value: Date) => value.toLocaleDateString('en-CA');
     const formatTime = (value: Date) => value.toTimeString().slice(0, 5);
     setSchedule({
@@ -287,7 +305,7 @@ export const Leads: React.FC = () => {
       startTime: formatTime(start),
       endTime: formatTime(end),
       title: `Meeting with ${lead.name}`,
-      description: '',
+      description: activeBooking ? 'Rescheduled from admin panel' : '',
     });
     setScheduleOpen(true);
   };
@@ -306,25 +324,43 @@ export const Leads: React.FC = () => {
 
     setBookingSaving(true);
     try {
-      const created = await api.bookCrmLead(selectedLead.id, {
-        start_time: start.toISOString(),
-        end_time: end.toISOString(),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata',
+      const payload = {
+        start_time: toLocalIsoWithOffset(start),
+        end_time: toLocalIsoWithOffset(end),
+        timezone: getBrowserTimezone(),
         title: schedule.title || undefined,
         description: schedule.description || undefined,
-      });
+      };
+      const isRescheduling = Boolean(booking?.lead_id === selectedLead.id);
+      const savedBooking = isRescheduling
+        ? await api.rescheduleCrmLeadBooking(selectedLead.id, payload)
+        : await api.bookCrmLead(selectedLead.id, payload);
 
       const bookedLead = { ...selectedLead, status: 'booked' as CrmLeadStatus };
-      setBooking(created);
+      setBooking(savedBooking);
       setSelectedLead(bookedLead);
       setLeads(current => current.map(lead => (lead.id === bookedLead.id ? bookedLead : lead)));
       setScheduleOpen(false);
       loadUpcomingMeetings();
-      addToast('Meeting booked and Google invitation sent.', 'success');
+      addToast(isRescheduling ? 'Meeting rescheduled in Google Calendar.' : 'Meeting booked and Google invitation sent.', 'success');
     } catch (error) {
-      addToast(error instanceof Error ? error.message : 'Failed to book lead', 'error');
+      addToast(error instanceof Error ? error.message : 'Failed to save booking', 'error');
     } finally {
       setBookingSaving(false);
+    }
+  };
+
+  const cancelBooking = async () => {
+    if (!selectedLead || !booking) return;
+    if (!window.confirm('Cancel this booking and remove the Google Calendar event?')) return;
+
+    try {
+      await api.cancelCrmLeadBooking(selectedLead.id);
+      setBooking(null);
+      loadUpcomingMeetings();
+      addToast('Booking cancelled and Google Calendar event removed.', 'info');
+    } catch (error) {
+      addToast(error instanceof Error ? error.message : 'Failed to cancel booking', 'error');
     }
   };
 
@@ -615,7 +651,8 @@ export const Leads: React.FC = () => {
           onStatusChange={status => updateLead(selectedLead, { status })}
           onNotesChange={notes => setSelectedLead({ ...selectedLead, notes })}
           onNotesBlur={() => updateLead(selectedLead, { notes: selectedLead.notes || '' })}
-          onSchedule={() => openSchedule(selectedLead)}
+          onSchedule={() => openSchedule(selectedLead, booking)}
+          onCancelBooking={cancelBooking}
           onSendTemplate={sendTemplate}
           onRetrigger={retriggerAutomations}
         />
@@ -692,11 +729,14 @@ export const Leads: React.FC = () => {
 
       {/* Schedule meeting */}
       {scheduleOpen && selectedLead && (
-        <ModalShell title="Schedule Google Meet" onClose={() => !bookingSaving && setScheduleOpen(false)}>
+        <ModalShell
+          title={booking?.lead_id === selectedLead.id ? 'Reschedule Google Meet' : 'Schedule Google Meet'}
+          onClose={() => !bookingSaving && setScheduleOpen(false)}
+        >
           <form onSubmit={bookLead} className="space-y-5">
             <ModalHeader
               icon={<CalendarDays className="h-5 w-5" />}
-              title="Schedule Google Meet"
+              title={booking?.lead_id === selectedLead.id ? 'Reschedule Google Meet' : 'Schedule Google Meet'}
               subtitle={`Google will email an invitation to ${selectedLead.email}.`}
               onClose={() => !bookingSaving && setScheduleOpen(false)}
             />
@@ -763,7 +803,13 @@ export const Leads: React.FC = () => {
               </SecondaryButton>
               <PrimaryButton type="submit" disabled={bookingSaving}>
                 {bookingSaving && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />}
-                {bookingSaving ? 'Booking…' : 'Book and invite'}
+                {bookingSaving
+                  ? booking?.lead_id === selectedLead.id
+                    ? 'Rescheduling…'
+                    : 'Booking…'
+                  : booking?.lead_id === selectedLead.id
+                    ? 'Reschedule'
+                    : 'Book and invite'}
               </PrimaryButton>
             </div>
           </form>
@@ -856,6 +902,7 @@ const LeadInspector = ({
   onNotesChange,
   onNotesBlur,
   onSchedule,
+  onCancelBooking,
   onSendTemplate,
   onRetrigger,
 }: {
@@ -871,6 +918,7 @@ const LeadInspector = ({
   onNotesChange: (notes: string) => void;
   onNotesBlur: () => void;
   onSchedule: () => void;
+  onCancelBooking: () => void;
   onSendTemplate: () => void;
   onRetrigger: () => void;
 }) => {
@@ -952,6 +1000,14 @@ const LeadInspector = ({
                       Open in Calendar
                     </a>
                   )}
+                  <SecondaryButton onClick={onSchedule}>
+                    <RefreshCcw className="h-4 w-4" />
+                    Reschedule
+                  </SecondaryButton>
+                  <DangerButton onClick={onCancelBooking}>
+                    <Trash2 className="h-4 w-4" />
+                    Cancel
+                  </DangerButton>
                 </div>
               </div>
             ) : canSchedule ? (
@@ -1294,6 +1350,13 @@ const SecondaryButton = ({ className = '', ...props }: ButtonProps) => (
   <button
     {...props}
     className={`inline-flex items-center justify-center gap-1.5 rounded-lg border border-border-app bg-surface-app px-3.5 py-2 text-sm font-medium text-text-primary transition hover:bg-hover-app disabled:cursor-not-allowed disabled:opacity-50 ${focusRing} ${className}`}
+  />
+);
+
+const DangerButton = ({ className = '', ...props }: ButtonProps) => (
+  <button
+    {...props}
+    className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium text-red-400 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50 ${focusRing} ${className}`}
   />
 );
 

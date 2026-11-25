@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_BASE_URL || "http://localhost:8000/api";
+const BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_BASE_URL || "http://localhost:8000/api";
 export const ARHASOFT_SITE_KEY = "arahasoft";
 export const CHAIBYTES_SITE_KEY = "chaibytes";
 
@@ -221,6 +221,7 @@ export function normalizeMarkdownForPublicSite(markdown: string): string {
 const getHeaders = () => {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    "ngrok-skip-browser-warning": "true",
   };
   const token = localStorage.getItem("CHAIBYTES_INTERNAL_API_TOKEN");
   const configuredToken = token || import.meta.env.VITE_CHAIBYTES_INTERNAL_API_TOKEN;
@@ -233,8 +234,12 @@ const getHeaders = () => {
 const getCrmHeaders = () => {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    "ngrok-skip-browser-warning": "true",
   };
-  const token = localStorage.getItem("CHAIBYTES_CRM_ACCESS_TOKEN") || import.meta.env.VITE_CHAIBYTES_CRM_ACCESS_TOKEN;
+  const token =
+    localStorage.getItem("CHAIBYTES_CRM_ACCESS_TOKEN") ||
+    localStorage.getItem("access_token") ||
+    import.meta.env.VITE_CHAIBYTES_CRM_ACCESS_TOKEN;
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
@@ -338,6 +343,8 @@ export interface GoogleCalendarBooking {
   start_time: string;
   end_time: string;
   timezone: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface GoogleUpcomingMeeting {
@@ -354,6 +361,23 @@ export interface GoogleUpcomingMeetingsResponse {
   calendar_id: string;
   days: number;
   meetings: GoogleUpcomingMeeting[];
+}
+
+export interface BookingAvailabilityBusyItem {
+  start_time: string;
+  end_time: string;
+  source: "booking" | "google_calendar" | string;
+  lead_id: string | null;
+  booking_id: string | null;
+}
+
+export interface BookingAvailabilityResponse {
+  organization_id: number;
+  calendar_connected: boolean;
+  start_time: string;
+  end_time: string;
+  timezone: string;
+  busy: BookingAvailabilityBusyItem[];
 }
 
 export interface CreateGoogleCalendarBookingPayload {
@@ -604,13 +628,37 @@ export const api = {
     return res.json();
   },
 
-  async createPublicCrmLead(orgIdentifier: string, lead: Pick<CrmLead, "name" | "email" | "phone" | "source" | "notes">): Promise<CrmLead> {
+  async createPublicCrmLead(
+    orgIdentifier: string,
+    lead: Pick<CrmLead, "name" | "email"> & Partial<Pick<CrmLead, "phone" | "source" | "notes">>,
+  ): Promise<CrmLead> {
     const res = await fetch(`${BASE_URL}/crm/public/${encodeURIComponent(orgIdentifier)}/leads`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(lead),
+      body: JSON.stringify({ source: "landing_website", ...lead }),
     });
     if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to submit public lead"));
+    return res.json();
+  },
+
+  async getBookingAvailability(params: {
+    orgIdentifier: string;
+    start_time: string;
+    end_time: string;
+    timezone?: string;
+    include_google_busy?: boolean;
+  }): Promise<BookingAvailabilityResponse> {
+    const query = new URLSearchParams({
+      start_time: params.start_time,
+      end_time: params.end_time,
+      timezone: params.timezone ?? "Asia/Kolkata",
+    });
+    if (params.include_google_busy !== undefined) {
+      query.set("include_google_busy", String(params.include_google_busy));
+    }
+
+    const res = await fetch(`${BASE_URL}/crm/public/${encodeURIComponent(params.orgIdentifier)}/availability?${query.toString()}`);
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to fetch booking availability"));
     return res.json();
   },
 
@@ -657,6 +705,11 @@ export const api = {
     return payload.authorization_url;
   },
 
+  async connectGoogleCalendar(): Promise<void> {
+    const authorizationUrl = await this.getGoogleCalendarAuthorizationUrl();
+    window.location.assign(authorizationUrl);
+  },
+
   async disconnectGoogleCalendar(): Promise<void> {
     const res = await fetch(getCrmUrl("/google"), {
       method: "DELETE",
@@ -693,6 +746,24 @@ export const api = {
     });
     if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to book lead"));
     return res.json();
+  },
+
+  async rescheduleCrmLeadBooking(id: string, payload: CreateGoogleCalendarBookingPayload): Promise<GoogleCalendarBooking> {
+    const res = await fetch(getCrmUrl(`/crm/leads/${encodeURIComponent(id)}/booking`), {
+      method: "PATCH",
+      headers: getCrmHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to reschedule booking"));
+    return res.json();
+  },
+
+  async cancelCrmLeadBooking(id: string): Promise<void> {
+    const res = await fetch(getCrmUrl(`/crm/leads/${encodeURIComponent(id)}/booking`), {
+      method: "DELETE",
+      headers: getCrmHeaders(),
+    });
+    if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to cancel booking"));
   },
 
   async triggerCrmLeadAutomations(id: string, trigger = "new_lead"): Promise<{ message: string }> {
